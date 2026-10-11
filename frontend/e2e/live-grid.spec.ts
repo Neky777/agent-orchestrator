@@ -242,6 +242,7 @@ test("Chat and TUI stream concurrently, keep drafts and send to their owning ses
 	await page.getByRole("button", { name: "Open Kanban", exact: true }).last().click();
 	await page.getByRole("button", { name: "Open Grid", exact: true }).last().click();
 	await expect(composer).toHaveText("Keep this draft");
+	expect(mutations).toEqual([]);
 	await page.evaluate(({ project, id }) => { window.location.hash = `/projects/${project}/sessions/${id}`; }, { project, id: "worker-1" });
 	const singleComposer = page.getByRole("combobox", { name: "Message the agent" });
 	await expect(singleComposer).toHaveText("Keep this draft");
@@ -250,5 +251,6 @@ test("Chat and TUI stream concurrently, keep drafts and send to their owning ses
 	await composer.press("Enter");
 	await expect.poll(() => sent["worker-1"]).toEqual(["Keep this draft"]);
 	expect(sent["worker-2"]).toBeUndefined();
-	expect(mutations.filter((url) => !url.endsWith("/conversation/messages"))).toEqual([]);
+	// The ordinary session view renews its existing Chat visibility lease.
+	expect(mutations.filter((url) => !url.endsWith("/conversation/messages") && !url.endsWith("/chat-view"))).toEqual([]);
 });
