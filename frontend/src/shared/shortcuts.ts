@@ -377,10 +377,35 @@ export function sessionSwitcherDirection(chord: ShortcutChord, isMac: boolean): 
 	return chord.shift ? -1 : 1;
 }
 
-/** True when this keyup is the modifier whose release commits the switcher. */
-export function isSessionSwitcherModifierRelease(key: string, isMac: boolean): boolean {
-	const normalized = normalizedKey(key);
-	return isMac ? normalized === "alt" || normalized === "option" : normalized === "control" || normalized === "ctrl";
+export type SessionSwitcherModifierInput = {
+	key: string;
+	code?: string;
+	alt: boolean;
+	ctrl: boolean;
+	/** Electron uses keyUp. DOM events use keyup; callers normalize to keyUp. */
+	type?: string;
+};
+
+/**
+ * True when this event means the held switcher modifier came up.
+ * macOS often does not emit keyUp for Option. Electron reports the
+ * flags-changed release as keyDown, key "Alt", with alt already false.
+ * Releasing Tab after Option is a keyUp whose alt flag is already false.
+ */
+export function isSessionSwitcherModifierRelease(input: SessionSwitcherModifierInput, isMac: boolean): boolean {
+	if (input.type === "char") return false;
+	const key = normalizedKey(input.key);
+	const code = normalizedKey(input.code ?? "");
+	if (isMac) {
+		const altKey = key === "alt" || key === "option" || code === "altleft" || code === "altright";
+		if (altKey && !input.alt) return true;
+		if (input.type === "keyUp" && !input.alt) return true;
+		return false;
+	}
+	const controlKey = key === "control" || key === "ctrl" || code === "controlleft" || code === "controlright";
+	if (controlKey && !input.ctrl) return true;
+	if (input.type === "keyUp" && !input.ctrl) return true;
+	return false;
 }
 
 export function matchesFocusTerminalShortcut(chord: ShortcutChord, isMac: boolean): boolean {

@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { aoBridge } from "../lib/bridge";
+import { isMacPlatform } from "../lib/platform";
 import {
 	buildSessionSwitcherEntries,
 	initialSessionSwitcherIndex,
@@ -9,6 +10,7 @@ import {
 	stepSessionSwitcherIndex,
 	type SessionSwitcherEntry,
 } from "../lib/session-switcher";
+import { isSessionSwitcherModifierRelease } from "../../shared/shortcuts";
 import { getSessionStatusDotView } from "../lib/session-presentation";
 import { cn } from "../lib/utils";
 import type { WorkspaceSession } from "../types/workspace";
@@ -89,7 +91,7 @@ export function SessionSwitcher({
 			openRef.current = next;
 			setOpen(next);
 		});
-		const disposeRelease = aoBridge.app.onSessionSwitcherRelease(() => {
+		const commitOpenSwitcher = () => {
 			const current = openRef.current;
 			openRef.current = null;
 			setOpen(null);
@@ -102,19 +104,50 @@ export function SessionSwitcher({
 				current.cancelled,
 			);
 			if (commitId) onCommitRef.current(commitId);
-		});
+		};
+		const disposeRelease = aoBridge.app.onSessionSwitcherRelease(commitOpenSwitcher);
 		const disposeCancel = aoBridge.app.onSessionSwitcherCancel(closeWithoutCommit);
+		// macOS delivers Option-up as a DOM keydown with altKey already false,
+		// and often never emits keyup. Listen here as well as in the main process.
+		const onKeyboard = (event: KeyboardEvent) => {
+			if (!openRef.current) return;
+			if (
+				!isSessionSwitcherModifierRelease(
+					{
+						key: event.key,
+						code: event.code,
+						alt: event.altKey,
+						ctrl: event.ctrlKey,
+						type: event.type === "keyup" ? "keyUp" : event.type,
+					},
+					isMacPlatform(),
+				)
+			) {
+				return;
+			}
+			event.preventDefault();
+			event.stopPropagation();
+			commitOpenSwitcher();
+		};
+		window.addEventListener("keydown", onKeyboard, true);
+		window.addEventListener("keyup", onKeyboard, true);
 		return () => {
 			disposeStep();
 			disposeRelease();
 			disposeCancel();
+			window.removeEventListener("keydown", onKeyboard, true);
+			window.removeEventListener("keyup", onKeyboard, true);
 		};
 	}, []);
 
 	if (!open) return null;
 	const selected = open.entries[open.index];
 	const byId = new Map(sessions.map((session) => [session.id, session]));
-	const selectedTitle = selected ? byId.get(selected.id)?.title ?? selected.id : "";
+	const selectedTitle = !selected
+		? ""
+		: selected.role === "orchestrator"
+			? t("sessionSwitcher.orchestrator")
+			: byId.get(selected.id)?.title ?? selected.id;
 	return (
 		<div className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center p-6" data-testid="session-switcher">
 			<div
@@ -129,15 +162,17 @@ export function SessionSwitcher({
 				<div className="max-h-[min(24rem,70vh)] overflow-y-auto p-1">
 					{open.entries.map((entry, index) => {
 						const session = byId.get(entry.id);
-						const title = session?.title ?? entry.id;
+						const title = entry.role === "orchestrator"
+							? t("sessionSwitcher.orchestrator")
+							: session?.title ?? entry.id;
 						const dot = session ? getSessionStatusDotView(session) : undefined;
 						const active = index === open.index;
 						return (
 							<div
 								aria-selected={active}
 								className={cn(
-									"flex h-8 items-center gap-2 rounded-md px-2 text-sm",
-									active ? "bg-accent text-accent-foreground" : "text-muted-foreground",
+									"flex h-8 items-center gap-2 rounded-md px-2 text-sm text-white",
+									active && "bg-foreground/15",
 								)}
 								id={`${listId}-${entry.id}`}
 								key={entry.id}
@@ -152,10 +187,7 @@ export function SessionSwitcher({
 								) : (
 									<span aria-hidden="true" className="size-2 shrink-0" />
 								)}
-								<span className="min-w-0 flex-1 truncate">{title}</span>
-								{entry.role === "orchestrator" ? (
-									<span className="shrink-0 text-2xs text-muted-foreground">{t("sessionSwitcher.orchestrator")}</span>
-								) : null}
+								<span className="min-w-0 flex-1 truncate text-white">{title}</span>
 							</div>
 						);
 					})}

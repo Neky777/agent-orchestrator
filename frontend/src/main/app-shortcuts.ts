@@ -109,14 +109,24 @@ export function attachAppShortcuts(
 ): void {
 	sessionSwitcherSend = (channel, ...args) => target.send(channel, ...args);
 	contents.on("before-input-event", (event, input) => {
-		if (input.type === "keyUp") {
-			if (!isSessionSwitcherModifierRelease(input.key, isMac)) return;
+		if (
+			(sessionSwitcherArmed || sessionSwitcherSuppressed) &&
+			isSessionSwitcherModifierRelease(
+				{
+					key: input.key,
+					code: input.code,
+					alt: input.alt,
+					ctrl: input.control,
+					type: input.type,
+				},
+				isMac,
+			)
+		) {
 			if (sessionSwitcherSuppressed) {
 				sessionSwitcherSuppressed = false;
 				sessionSwitcherArmed = false;
 				return;
 			}
-			if (!sessionSwitcherArmed) return;
 			sessionSwitcherArmed = false;
 			event.preventDefault();
 			target.send(SESSION_SWITCHER_RELEASE_CHANNEL);

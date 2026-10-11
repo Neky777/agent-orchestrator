@@ -219,7 +219,7 @@ describe("attachAppShortcuts", () => {
 		const nextTab = source.emit({ key: "Tab", control: true });
 		const open = source.emit({ key: "Tab", alt: true });
 		const again = source.emit({ key: "Tab", alt: true, isAutoRepeat: true });
-		const release = source.emit({ key: "Alt", alt: false, type: "keyUp" });
+		const release = source.emit({ key: "Alt", code: "AltLeft", alt: false, type: "keyDown" });
 
 		expect(target.send).toHaveBeenNthCalledWith(1, NEXT_TAB_SHORTCUT_CHANNEL);
 		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, 1);

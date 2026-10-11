@@ -128,9 +128,12 @@ describe("session switcher chord", () => {
 		expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true, shift: true }), false)).toBe(-1);
 		expect(sessionSwitcherDirection(chord({ key: "Tab", alt: true }), false)).toBeNull();
 		expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true, meta: true }), false)).toBeNull();
-		expect(isSessionSwitcherModifierRelease("Alt", true)).toBe(true);
-		expect(isSessionSwitcherModifierRelease("Control", false)).toBe(true);
-		expect(isSessionSwitcherModifierRelease("Shift", true)).toBe(false);
+		expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: false, ctrl: false, type: "keyDown", code: "AltLeft" }, true)).toBe(true);
+		expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: true, ctrl: false, type: "keyDown" }, true)).toBe(false);
+		expect(isSessionSwitcherModifierRelease({ key: "Tab", alt: false, ctrl: false, type: "keyUp" }, true)).toBe(true);
+		expect(isSessionSwitcherModifierRelease({ key: "Tab", alt: true, ctrl: false, type: "keyUp" }, true)).toBe(false);
+		expect(isSessionSwitcherModifierRelease({ key: "Control", alt: false, ctrl: false, type: "keyUp" }, false)).toBe(true);
+		expect(isSessionSwitcherModifierRelease({ key: "Shift", alt: true, ctrl: false, type: "keyUp" }, true)).toBe(false);
 		expect(defaultShortcutBindings("switch-session", true).map((binding) => binding.alt)).toEqual([true, true]);
 		expect(defaultShortcutBindings("switch-session", false).map((binding) => binding.ctrl)).toEqual([true, true]);
 	});

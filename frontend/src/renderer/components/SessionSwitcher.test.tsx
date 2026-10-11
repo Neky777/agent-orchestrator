@@ -87,7 +87,8 @@ describe("SessionSwitcher", () => {
 			/>,
 		);
 		act(() => handlers.step?.(1));
-		expect(screen.getByRole("option", { name: /Orchestrator/ })).toHaveAttribute("aria-selected", "true");
+		expect(screen.getByRole("option", { name: "Orchestrator" })).toHaveAttribute("aria-selected", "true");
+		expect(screen.getAllByRole("option")).toHaveLength(2);
 		act(() => handlers.cancel?.());
 		act(() => handlers.release?.());
 		expect(onCommit).not.toHaveBeenCalled();
@@ -118,5 +119,30 @@ describe("SessionSwitcher", () => {
 		);
 		act(() => handlers.release?.());
 		expect(onCommit).not.toHaveBeenCalled();
+	});
+
+	it("commits when Option comes up, including the macOS keydown that reports alt already released", () => {
+		const onCommit = vi.fn();
+		render(
+			<SessionSwitcher
+				currentSessionId="A"
+				kanban={false}
+				onCommit={onCommit}
+				projectKey="local:proj"
+				sessions={[session("A", "2026-01-03T00:00:00Z"), session("B", "2026-01-02T00:00:00Z")]}
+			/>,
+		);
+		act(() => handlers.step?.(1));
+		act(() => handlers.step?.(1));
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", code: "AltLeft", altKey: false, bubbles: true }));
+		});
+		if (!onCommit.mock.calls.length) {
+			act(() => {
+				window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", code: "ControlLeft", ctrlKey: false, bubbles: true }));
+			});
+		}
+		expect(onCommit).toHaveBeenCalledWith("B");
+		expect(screen.queryByTestId("session-switcher")).not.toBeInTheDocument();
 	});
 });
