@@ -23,6 +23,8 @@ Order, the selected orchestrator, completed visibility and split proportions are
 
 All local terminals share AO's existing mux socket. The WebGL pool remains capped at eight accelerated terminals; additional panes use xterm's interactive DOM renderer. Terminal fitting uses the existing resize coalescing. Chat conversations share the existing query cache and CDC connection.
 
+Embedded Chat file-completion inventories refresh every 30 seconds while visible, avoiding one persistent workspace-file SSE connection per panel (Chromium's HTTP/1 per-origin connection limit). Single-session file watching keeps its existing event subscription. Conversation output still streams through the shared CDC transport. Grid does not acquire wake leases for hibernated Chat sessions; existing human input wakes them through AO's ordinary command path.
+
 ## Separate macOS lab build
 
 Build from an isolated checkout with its own dependencies:
@@ -41,10 +43,13 @@ The bundle is named **Agent Orchestrator Live Grid.app**, with bundle ID `dev.ag
 
 This build disables updates, automatic relocation to Applications, stale-copy retirement and registration of the production deep-link protocol. Cloud state and the Browser runtime also use its isolated root. It does not attach to installed AO sessions. Open a disposable project in it; keep commercial projects in the installed version.
 
+The lab rejects production/development state directories and symlink escapes before creating state. Its tmux socket includes a stable hash of the lab root, separating independent lab profiles.
+
 For the full native fixture check, run from the lab checkout:
 
 ```sh
 AO_GRID_APP_PATH='/absolute/path/Agent Orchestrator Live Grid.app' node e2e/live-grid-desktop.mjs
+# Repeat with AO_GRID_SESSION_MODE=tui or chat for twelve panels of one type.
 ```
 
 The script creates a temporary Git project and a deterministic test provider, then uses the packaged preload, real daemon, SQLite, PTY and ACP runtimes. It rejects an occupied port and verifies the fixture provider before creating sessions. Cleanup addresses only its own recorded session IDs in its isolated daemon. Screenshots, provider PID evidence and a validation report remain in the reported temporary directory.

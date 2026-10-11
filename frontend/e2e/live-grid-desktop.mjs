@@ -9,6 +9,8 @@ import { spawnSync } from "node:child_process";
 import { _electron, expect } from "playwright/test";
 
 const bundle = process.env.AO_GRID_APP_PATH;
+const sessionMode = process.env.AO_GRID_SESSION_MODE ?? "mixed";
+assert.ok(["mixed", "chat", "tui"].includes(sessionMode));
 if (!bundle?.endsWith("Agent Orchestrator Live Grid.app"))
 	throw new Error("Provide AO_GRID_APP_PATH pointing to the separate Live Grid lab bundle.");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "ao-grid-desktop-"));
@@ -109,6 +111,16 @@ const launches = () => records().filter((entry) => entry.event === "launch");
 try {
 	const page = await app.firstWindow();
 	page.on("pageerror", (error) => errors.push(error.message));
+	await page.evaluate(() => {
+		const NativeSocket = window.WebSocket;
+		window.__gridSockets = [];
+		window.WebSocket = class extends NativeSocket {
+			constructor(...args) {
+				super(...args);
+				if (new URL(this.url).pathname.endsWith("/mux")) window.__gridSockets.push(this);
+			}
+		};
+	});
 	await expect
 		.poll(
 			async () => {
@@ -141,13 +153,13 @@ try {
 		sessions.push(value.session.id);
 		return value.session.id;
 	};
-	const orchestrator = await spawn("orchestrator", "chat", 0);
+	const orchestrator = await spawn("orchestrator", sessionMode === "tui" ? "tui" : "chat", 0);
 	await page.evaluate((id) => {
 		window.location.hash = `/projects/${id}/grid`;
 	}, project);
 	const panels = page.getByTestId("grid-panel");
 	for (const count of [1, 2, 4, 6, 9, 12]) {
-		while (sessions.length < count) await spawn("worker", sessions.length < 3 ? "chat" : "tui", sessions.length);
+		while (sessions.length < count) await spawn("worker", sessionMode === "mixed" ? (sessions.length < 3 ? "chat" : "tui") : sessionMode, sessions.length);
 		await expect(panels).toHaveCount(count, { timeout: 30_000 });
 		await expect(panels.first()).toHaveAttribute("data-session-id", orchestrator);
 		await expect.poll(() => launches().length, { timeout: 30_000 }).toBe(count);
@@ -158,12 +170,19 @@ try {
 	const worker = (id) => page.locator(`[data-testid="grid-panel"][data-session-id="${id}"]`);
 	const chat = worker(sessions[1]);
 	const draft = chat.getByRole("combobox", { name: "Message the agent" });
+	if (sessionMode !== "tui") {
 	await draft.fill("isolated-grid-chat-input");
 	await draft.press("Enter");
 	await expect(chat.getByRole("log", { name: "Conversation" })).toContainText("isolated-grid-chat-input", {
 		timeout: 20_000,
 	});
+	await expect.poll(() => records().some((entry) => entry.event === "input" && entry.session === sessions[1] && entry.text.includes("isolated-grid-chat-input")), { timeout: 20_000 }).toBe(true);
+	await expect(draft).toHaveText("");
+	await draft.fill("persistent grid draft");
+	}
 	const tui = worker(sessions[3]);
+	if (sessionMode !== "chat") {
+	assert.equal(await page.evaluate(() => window.__gridSockets.length), 1, "All local terminals share one mux socket");
 	await tui.locator(".xterm-helper-textarea").focus();
 	await page.keyboard.type("isolated-grid-tui-input");
 	await expect
@@ -176,7 +195,12 @@ try {
 			{ timeout: 10_000 },
 		)
 		.toContain("isolated-grid-tui-input");
-	await draft.fill("persistent grid draft");
+	await page.evaluate(() => window.__gridSockets[0].close());
+	await expect.poll(() => page.evaluate(() => window.__gridSockets.filter((socket) => socket.readyState === WebSocket.OPEN).length), { timeout: 20_000 }).toBe(1);
+	await tui.locator(".xterm-helper-textarea").focus();
+	await page.keyboard.type("reconnected-grid-input");
+	await expect.poll(() => records().filter((entry) => entry.event === "input" && entry.session === sessions[3]).map((entry) => entry.text).join(""), { timeout: 10_000 }).toContain("reconnected-grid-input");
+	}
 	await chat.getByTestId("grid-panel-header").dblclick();
 	await expect(tui).toBeHidden();
 	await chat.getByRole("button", { name: "Restore grid" }).click();
@@ -188,7 +212,7 @@ try {
 	await expect(page.getByTestId("live-grid")).toHaveCount(0);
 	await page.getByRole("button", { name: "Open Grid", exact: true }).last().click();
 	await expect(panels).toHaveCount(12);
-	await expect(draft).toHaveText("persistent grid draft");
+	if (sessionMode !== "tui") await expect(draft).toHaveText("persistent grid draft");
 	assert.ok(Math.abs((await panels.first().boundingBox()).width - width) < 2);
 	assert.deepEqual(launches(), baseline, "Changing presentation must not launch provider processes");
 	for (const entry of baseline) process.kill(entry.pid, 0);
@@ -207,6 +231,7 @@ try {
 			{
 				bundle,
 				root,
+				sessionMode,
 				project,
 				sessions,
 				providerPids: baseline.map((entry) => entry.pid),

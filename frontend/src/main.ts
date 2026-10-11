@@ -1,4 +1,5 @@
 import { syncMacWindowButtons } from "./main/window-chrome";
+import { isolatedLiveGridRoot } from "./main/live-grid-lab";
 import { MAC_TITLEBAR_HEIGHT, MAC_WINDOW_BUTTON_X, MAC_WINDOW_BUTTON_RADIUS } from "./shared/window-chrome";
 import { finishUpdateQuit } from "./main/update-quit";
 import { acknowledgeMacUpdateRestart } from "./main/mac-update-progress";
@@ -66,7 +67,7 @@ import {
 	type UiSettings,
 } from "./main/ui-settings";
 import { execFile, spawn, type ChildProcess } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { closeSync, existsSync, mkdirSync, openSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { chmod, copyFile, mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
@@ -210,13 +211,15 @@ process.stderr.on("error", ignoreStdStreamError);
 // The optional lab build has its own identity and state, including on a Finder
 // launch. It cannot attach to the installed app's daemon or Chromium profile.
 const liveGridLab = import.meta.env.AO_BUILD_VARIANT === "live-grid-lab";
-const liveGridLabRoot = path.resolve(process.env.AO_LIVE_GRID_LAB_ROOT ?? path.join(os.homedir(), ".ao", "live-grid-lab"));
+const liveGridLabRoot = liveGridLab
+	? isolatedLiveGridRoot(process.env.AO_LIVE_GRID_LAB_ROOT ?? path.join(os.homedir(), ".ao", "live-grid-lab"), os.homedir())
+	: "";
+const liveGridLabSocket = `ao-live-grid-lab-${createHash("sha256").update(liveGridLabRoot).digest("hex").slice(0, 12)}`;
 if (liveGridLab) {
-	if (liveGridLabRoot === path.join(os.homedir(), ".ao") || liveGridLabRoot === path.join(os.homedir(), ".ao", "data") || liveGridLabRoot === path.join(os.homedir(), ".ao", "electron")) throw new Error("The Live Grid lab requires its own state directory.");
 	process.env.AO_DATA_DIR = path.join(liveGridLabRoot, "data");
 	process.env.AO_RUN_FILE = path.join(liveGridLabRoot, "running.json");
 	process.env.AO_PORT = process.env.AO_LIVE_GRID_LAB_PORT ?? "32191";
-	process.env.AO_TMUX_SOCKET_NAME = "ao-live-grid-lab";
+	process.env.AO_TMUX_SOCKET_NAME = liveGridLabSocket;
 }
 app.setName(liveGridLab ? "Agent Orchestrator Live Grid" : app.isPackaged ? "Agent Orchestrator" : "Agent Orchestrator (dev)");
 
@@ -1276,7 +1279,7 @@ function daemonEnv(forceKeep = keepDaemonAlive(process.env)): NodeJS.ProcessEnv 
 			(app.isPackaged
 				? path.join(process.resourcesPath, "acp-runtime")
 				: path.join(app.getAppPath(), "resources", "acp-runtime")),
-		...(bundledTmuxBinary ? { AO_TMUX_BINARY: bundledTmuxBinary, AO_TMUX_SOCKET_NAME: liveGridLab ? "ao-live-grid-lab" : "ao" } : {}),
+		...(bundledTmuxBinary ? { AO_TMUX_BINARY: bundledTmuxBinary, AO_TMUX_SOCKET_NAME: liveGridLab ? liveGridLabSocket : "ao" } : {}),
 	};
 	// In dev mode, inject isolation defaults so the dev daemon never collides with
 	// the installed app. User-set env vars take priority (checked first).

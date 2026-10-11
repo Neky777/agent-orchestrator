@@ -19,6 +19,7 @@ const test = process.env.AO_E2E_ELECTRON
 		})
 	: base;
 const origin = `http://127.0.0.1:${process.env.AO_E2E_PORT ?? 5173}`;
+test.setTimeout(90_000);
 const project = "grid-project";
 const orchestrator = `${project}-orchestrator`;
 const panel = (page: Page, id: string) => page.locator(`[data-testid="grid-panel"][data-session-id="${id}"]`);
