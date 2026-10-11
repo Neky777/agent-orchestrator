@@ -1,6 +1,6 @@
 # Live Grid
 
-Live Grid is a project presentation route, `/projects/:projectId/grid`. Open it with **Open Grid**, beside **Open Kanban** in an orchestrator session, or from the project board. The board's existing task behavior is unchanged.
+Live Grid is a project presentation route, `/projects/:projectId/grid` locally and `/host/:hostId/project/:projectId/grid` for paired remote daemons. Open it with **Open Grid**, beside **Open Kanban** in an orchestrator session, or from the project board. The board's existing task behavior is unchanged.
 
 ## Sessions and lifecycle
 
@@ -19,9 +19,9 @@ The orchestrator occupies the first cell in row order. Workers have stable keys 
 
 Drag a worker's grip to another worker, or use its previous/next buttons. Double-click a header or click its expand button to maximize; restore returns to the saved grid. Divider arrow keys resize by 10 pixels, or 50 with Shift, when the divider itself has focus. Terminal keyboard shortcuts continue through xterm, including font zoom and its existing fullscreen action.
 
-Order, the selected orchestrator, completed visibility and split proportions are saved per project in Electron local storage (`ao.live-grid.v1.*`). Splits are remembered separately for each grid shape. No database migration is required.
+Order, the selected orchestrator, completed visibility and split proportions are saved per host and project in Electron local storage (`ao.live-grid.v1.*`). Splits are remembered separately for each grid shape. No database migration is required.
 
-All local terminals share AO's existing mux socket. The WebGL pool remains capped at eight accelerated terminals; additional panes use xterm's interactive DOM renderer. Terminal fitting uses the existing resize coalescing. Chat conversations share the existing query cache and CDC connection.
+All local terminals share AO's existing mux socket. Remote terminals share one mux socket per connected host through AO's existing authenticated loopback proxy. Remote snapshots, conversations, restore controls and asset URLs keep the owning host; equal session IDs on different hosts have separate caches. Failed/offline snapshots preserve panels and buffers. A replacement proxy reconnects the retained terminals. Conversation fallback polling is shared between observers of each remote session. The WebGL pool remains capped at eight accelerated terminals; additional panes use xterm's interactive DOM renderer. Terminal fitting uses the existing resize coalescing. Chat conversations share the existing query cache and CDC connection.
 
 Embedded Chat file-completion inventories refresh every 30 seconds while visible, avoiding one persistent workspace-file SSE connection per panel (Chromium's HTTP/1 per-origin connection limit). Single-session file watching keeps its existing event subscription. Conversation output still streams through the shared CDC transport. Grid does not acquire wake leases for hibernated Chat sessions; existing human input wakes them through AO's ordinary command path.
 
@@ -67,4 +67,12 @@ The script creates a temporary Git project and a deterministic test provider, th
 
 The lab bundle is for parallel evaluation and does not migrate production data. Do not copy a live AO database into another running daemon, replace the installed app, or point the lab at commercial workspaces. A production transition should use a reviewed, signed release containing this branch, during a planned update window with an AO data backup and the normal session restore procedure. This implementation changes presentation and requires no session or model configuration migration.
 
-The initial Grid route covers local projects. Remote-host and cloud project navigation remains in the existing views. Platform packaging and notarization need the project's normal release infrastructure.
+Grid supports local and paired remote-host projects using API contract version 1, without a daemon upgrade or new orchestration API. Cloud control-plane project Grid remains outside this implementation. Platform packaging and notarization need the project's normal release infrastructure.
+
+## Ordinary desktop build and isolated verification
+
+The ordinary packaged app retains its name, bundle ID, data paths and remote credentials. Before installation, the exact bundle can be exercised with `AO_DESKTOP_TEST_ROOT=/absolute/scratch/profile` and an unused `AO_DESKTOP_TEST_PORT`. This forces separate data, Chromium, run-file, Browser, cloud state and tmux ownership; it disables updates, relocation and production deep-link registration for that run. A normal Finder launch without these overrides uses the existing `~/.ao` installation. The profile guard rejects production paths and credential symlink escapes.
+
+`live-grid-desktop.mjs` accepts the ordinary `Agent Orchestrator.app` as well as the optional lab bundle, and always supplies a disposable test root. It records native process memory/CPU at 1, 2, 4, 6, 9 and 12 sessions.
+
+For a locally authorized update, quit only the local desktop app, verify its managed local daemon has released the database, and preserve the old app plus all durable `~/.ao` data, pairing/auth settings and Electron profile before replacement. Check SQLite compatibility on a backup snapshot first. Remote proxies close client connections only; they do not stop the remote daemon or its sessions. View-only verification of commercial remote projects must not send prompts or invoke restore, kill, mode-transition or workspace operations. Restore the old app and pre-update local data together for rollback; do not roll back server data.

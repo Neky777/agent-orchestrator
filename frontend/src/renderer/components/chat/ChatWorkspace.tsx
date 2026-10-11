@@ -3911,7 +3911,9 @@ function Timeline({
 					)}
 				>
 					<div className="absolute inset-0 cursor-grab group-active/scroll:cursor-grabbing">
-						{minimapEnabled && !inspectorOpenRef.current
+						{/* Visibility is imperative above. Keep ticks mounted so a
+						    quiet transcript can reveal them without a timeline render. */}
+						{minimapEnabled
 						? scrollbar.markers.map((marker, index) => {
 								const distance =
 									hoveredMarker === null
