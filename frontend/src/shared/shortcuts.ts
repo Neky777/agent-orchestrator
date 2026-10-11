@@ -181,17 +181,15 @@ export function defaultShortcutBindings(id: AppShortcutId, isMac: boolean): read
 		case "next-session":
 			return [isMac ? binding("ArrowDown", { meta: true, alt: true }) : binding("PageDown", { ctrl: true })];
 		case "previous-tab":
-			// Windows/Linux Ctrl+Tab belongs to the session switcher, so terminal
-			// tabs use Ctrl+Shift+PageUp there. macOS keeps Ctrl+Tab.
-			return [isMac ? binding("Tab", { ctrl: true, shift: true }) : binding("PageUp", { ctrl: true, shift: true })];
+			// Ctrl+Tab is the session switcher on every platform. In-session tabs
+			// use Ctrl+Shift+PageUp.
+			return [binding("PageUp", { ctrl: true, shift: true })];
 		case "next-tab":
-			return [isMac ? binding("Tab", { ctrl: true }) : binding("PageDown", { ctrl: true, shift: true })];
+			return [binding("PageDown", { ctrl: true, shift: true })];
 		case "switch-session":
-			// macOS Option+Tab. Windows/Linux Ctrl+Tab. Shift reverses.
-			// Both directions are listed so the shortcut help matches the switcher.
-			return isMac
-				? [binding("Tab", { alt: true }), binding("Tab", { alt: true, shift: true })]
-				: [binding("Tab", { ctrl: true }), binding("Tab", { ctrl: true, shift: true })];
+			// Ctrl+Tab on every platform. Shift reverses.
+			// Option+Tab does not arrive through Electron on macOS.
+			return [binding("Tab", { ctrl: true }), binding("Tab", { ctrl: true, shift: true })];
 		case "focus-terminal":
 			return [isMac ? binding("t", { meta: true, shift: true }) : binding("t", { ctrl: true, shift: true })];
 		case "toggle-browser-devtools":
@@ -381,18 +379,15 @@ export function matchesNextTabShortcut(chord: ShortcutChord, isMac: boolean): bo
 /**
  * Direction for one Tab press of the project session switcher.
  * 1 moves forward, -1 moves backward. Null when the chord belongs to something else.
- * macOS is Option+Tab. Windows and Linux are Ctrl+Tab. Shift reverses.
+ * Every platform uses Ctrl+Tab. Shift reverses. Option+Tab is not used: macOS
+ * does not deliver it through Electron's before-input-event.
  * The binding is fixed: a customized next-tab chord must not move this switcher,
  * and this switcher must not follow a customized binding onto Ctrl+C or similar.
  */
 export function sessionSwitcherDirection(chord: ShortcutChord, isMac: boolean): -1 | 1 | null {
+	void isMac;
 	if (normalizedKey(chord.key) !== "tab") return null;
-	if (chord.meta) return null;
-	if (isMac) {
-		if (!chord.alt || chord.ctrl) return null;
-		return chord.shift ? -1 : 1;
-	}
-	if (!chord.ctrl || chord.alt) return null;
+	if (chord.meta || chord.alt || !chord.ctrl) return null;
 	return chord.shift ? -1 : 1;
 }
 
@@ -406,25 +401,15 @@ export type SessionSwitcherModifierInput = {
 };
 
 /**
- * True only when the switcher modifier key itself came up.
- * macOS often skips keyUp for Option. Electron then reports the flags-changed
- * release as keyDown, key "Alt", code "AltLeft" or "AltRight", with alt already
- * false. The keyUp for Option can also arrive with alt still true, so a keyUp
- * of the modifier counts even when the flag lags.
- * Tab keyup is not a release. While Option or Ctrl is held, Electron often
- * reports that keyup with the modifier flag already false, which used to commit
- * the highlighted row (often the current session) before the next Tab press.
+ * True only when Ctrl itself came up. Tab keyup is not a release: Electron
+ * often reports that keyup with ctrl already false while Ctrl is still held.
+ * A Control keyUp counts even when the ctrl flag is still true.
  */
 export function isSessionSwitcherModifierRelease(input: SessionSwitcherModifierInput, isMac: boolean): boolean {
+	void isMac;
 	if (input.type === "char") return false;
 	const key = normalizedKey(input.key);
 	const code = normalizedKey(input.code ?? "");
-	if (isMac) {
-		const altKey = key === "alt" || key === "option" || key === "altgraph"
-			|| code === "altleft" || code === "altright";
-		if (!altKey) return false;
-		return input.type === "keyUp" || !input.alt;
-	}
 	const controlKey = key === "control" || key === "ctrl" || code === "controlleft" || code === "controlright";
 	if (!controlKey) return false;
 	return input.type === "keyUp" || !input.ctrl;

@@ -79,7 +79,7 @@ export function cancelSessionSwitcherForFocusLoss(): void {
 	const armed = sessionSwitcherArmed;
 	// Escape leaves the gesture suppressed until the modifier comes up. Blur
 	// must clear that too. Otherwise the release happens outside the window
-	// and the next Option+Tab or Ctrl+Tab is swallowed.
+	// and the next Ctrl+Tab is swallowed.
 	sessionSwitcherArmed = false;
 	sessionSwitcherSuppressed = false;
 	if (armed) sessionSwitcherSend?.(SESSION_SWITCHER_CANCEL_CHANNEL);
@@ -156,8 +156,8 @@ export function attachAppShortcuts(
 		if (isRecording()) return;
 		const switcherDirection = sessionSwitcherDirection(chord, isMac);
 		if (switcherDirection) {
-			// Own the chord before next-tab. On Windows/Linux Ctrl+Tab is also the
-			// tab-strip shortcut; the session switcher is the agreed owner there.
+			// Own Ctrl+Tab before next-tab. The session switcher is the owner on
+			// every platform. Option+Tab is not delivered on macOS.
 			// Repeats advance. The first keydown only opens (the renderer decides).
 			event.preventDefault();
 			if (sessionSwitcherSuppressed) return;

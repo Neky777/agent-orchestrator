@@ -1,7 +1,6 @@
 import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { aoBridge } from "../lib/bridge";
-import { isMacPlatform } from "../lib/platform";
 import type { WorkspaceSession } from "../types/workspace";
 import { SessionSwitcher } from "./SessionSwitcher";
 
@@ -122,7 +121,7 @@ describe("SessionSwitcher", () => {
 		expect(onCommit).not.toHaveBeenCalled();
 	});
 
-	it("does not commit when Tab or Shift comes up while Option is still held, then commits once on Option", () => {
+	it("does not commit when Tab or Shift comes up while Ctrl is still held, then commits once on Ctrl", () => {
 		const onCommit = vi.fn();
 		render(
 			<SessionSwitcher
@@ -135,8 +134,7 @@ describe("SessionSwitcher", () => {
 		);
 		act(() => handlers.step?.(1));
 		act(() => handlers.step?.(1));
-		const mac = isMacPlatform();
-		const modifierName = mac ? "Alt" : "Control";
+		const modifierName = "Control";
 		const held = (key: string, code: string, type: "keydown" | "keyup") => {
 			const event = new KeyboardEvent(type, {
 				key,
@@ -158,9 +156,8 @@ describe("SessionSwitcher", () => {
 		act(() => {
 			window.dispatchEvent(new KeyboardEvent("keyup", {
 				key: modifierName,
-				code: mac ? "AltLeft" : "ControlLeft",
-				altKey: mac,
-				ctrlKey: !mac,
+				code: "ControlLeft",
+				ctrlKey: true,
 				bubbles: true,
 			}));
 		});
@@ -172,7 +169,7 @@ describe("SessionSwitcher", () => {
 		expect(onCommit).toHaveBeenCalledTimes(1);
 	});
 
-	it("commits when Option comes up, including the macOS keydown that reports alt already released", () => {
+	it("commits when Ctrl comes up, including a keydown that reports ctrl already released", () => {
 		const onCommit = vi.fn();
 		render(
 			<SessionSwitcher
@@ -186,13 +183,8 @@ describe("SessionSwitcher", () => {
 		act(() => handlers.step?.(1));
 		act(() => handlers.step?.(1));
 		act(() => {
-			window.dispatchEvent(new KeyboardEvent("keydown", { key: "Alt", code: "AltLeft", altKey: false, bubbles: true }));
+			window.dispatchEvent(new KeyboardEvent("keydown", { key: "Control", code: "ControlLeft", ctrlKey: false, bubbles: true }));
 		});
-		if (!onCommit.mock.calls.length) {
-			act(() => {
-				window.dispatchEvent(new KeyboardEvent("keyup", { key: "Control", code: "ControlLeft", ctrlKey: false, bubbles: true }));
-			});
-		}
 		expect(onCommit).toHaveBeenCalledWith("B");
 		expect(screen.queryByTestId("session-switcher")).not.toBeInTheDocument();
 	});

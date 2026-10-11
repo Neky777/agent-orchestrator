@@ -211,54 +211,54 @@ describe("attachAppShortcuts", () => {
 		expect(event.preventDefault).toHaveBeenCalledTimes(1);
 	});
 
-	it("keeps macOS Ctrl+Tab as next tab and gives Option+Tab to the session switcher", () => {
+	it("gives macOS Ctrl+Tab to the session switcher and ignores Option+Tab", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
 		attachAppShortcuts(source, true, target);
 
-		const nextTab = source.emit({ key: "Tab", control: true });
-		const open = source.emit({ key: "Tab", alt: true });
-		const again = source.emit({ key: "Tab", alt: true, isAutoRepeat: true });
-		const release = source.emit({ key: "Alt", code: "AltLeft", alt: false, type: "keyDown" });
+		const optionTab = source.emit({ key: "Tab", alt: true });
+		const open = source.emit({ key: "Tab", control: true });
+		const again = source.emit({ key: "Tab", control: true, isAutoRepeat: true });
+		const release = source.emit({ key: "Control", code: "ControlLeft", control: false, type: "keyUp" });
 
-		expect(target.send).toHaveBeenNthCalledWith(1, NEXT_TAB_SHORTCUT_CHANNEL);
+		expect(optionTab.preventDefault).not.toHaveBeenCalled();
+		expect(target.send).not.toHaveBeenCalledWith(NEXT_TAB_SHORTCUT_CHANNEL);
+		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, 1);
 		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, 1);
-		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_STEP_CHANNEL, 1);
-		expect(target.send).toHaveBeenNthCalledWith(4, SESSION_SWITCHER_RELEASE_CHANNEL);
-		expect(nextTab.preventDefault).toHaveBeenCalledOnce();
+		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_RELEASE_CHANNEL);
 		expect(open.preventDefault).toHaveBeenCalledOnce();
 		expect(again.preventDefault).toHaveBeenCalledOnce();
 		expect(release.preventDefault).toHaveBeenCalledOnce();
 		expect(target.focus).not.toHaveBeenCalled();
 	});
 
-	it("commits once on the modifier key, in either release order, and ignores Tab and Shift keyup", () => {
+	it("commits once on Ctrl, in either release order, and ignores Tab and Shift keyup", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
 		attachAppShortcuts(source, true, target);
 
-		source.emit({ key: "Tab", alt: true });
-		source.emit({ key: "Tab", alt: true });
-		const tabUpWhileOptionHeld = source.emit({ key: "Tab", alt: false, type: "keyUp" });
-		const shiftUp = source.emit({ key: "Shift", code: "ShiftLeft", alt: false, type: "keyUp" });
+		source.emit({ key: "Tab", control: true });
+		source.emit({ key: "Tab", control: true });
+		const tabUpWhileCtrlHeld = source.emit({ key: "Tab", control: false, type: "keyUp" });
+		const shiftUp = source.emit({ key: "Shift", code: "ShiftLeft", control: false, type: "keyUp" });
 		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
-		expect(tabUpWhileOptionHeld.preventDefault).not.toHaveBeenCalled();
+		expect(tabUpWhileCtrlHeld.preventDefault).not.toHaveBeenCalled();
 		expect(shiftUp.preventDefault).not.toHaveBeenCalled();
 
-		const optionUpAfterTab = source.emit({ key: "Alt", code: "AltLeft", alt: true, type: "keyUp" });
-		const tabUpAfterCommit = source.emit({ key: "Tab", alt: false, type: "keyUp" });
-		expect(optionUpAfterTab.preventDefault).toHaveBeenCalledOnce();
+		const ctrlUpAfterTab = source.emit({ key: "Control", code: "ControlLeft", control: true, type: "keyUp" });
+		const tabUpAfterCommit = source.emit({ key: "Tab", control: false, type: "keyUp" });
+		expect(ctrlUpAfterTab.preventDefault).toHaveBeenCalledOnce();
 		expect(tabUpAfterCommit.preventDefault).not.toHaveBeenCalled();
 		expect(target.send).toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
 		expect(target.send.mock.calls.filter((call) => call[0] === SESSION_SWITCHER_RELEASE_CHANNEL)).toHaveLength(1);
 
 		target.send.mockClear();
-		source.emit({ key: "Tab", alt: true, shift: true });
-		source.emit({ key: "Tab", code: "Tab", alt: true, shift: true, isAutoRepeat: true });
-		const optionFirst = source.emit({ key: "Alt", code: "AltRight", alt: false, type: "keyDown" });
-		const tabAfterOption = source.emit({ key: "Tab", alt: false, type: "keyUp" });
-		expect(optionFirst.preventDefault).toHaveBeenCalledOnce();
-		expect(tabAfterOption.preventDefault).not.toHaveBeenCalled();
+		source.emit({ key: "Tab", control: true, shift: true });
+		source.emit({ key: "Tab", code: "Tab", control: true, shift: true, isAutoRepeat: true });
+		const ctrlFirst = source.emit({ key: "Control", code: "ControlRight", control: false, type: "keyUp" });
+		const tabAfterCtrl = source.emit({ key: "Tab", control: false, type: "keyUp" });
+		expect(ctrlFirst.preventDefault).toHaveBeenCalledOnce();
+		expect(tabAfterCtrl.preventDefault).not.toHaveBeenCalled();
 		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, -1);
 		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, -1);
 		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_RELEASE_CHANNEL);

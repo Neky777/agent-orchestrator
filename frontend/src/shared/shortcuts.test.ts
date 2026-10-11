@@ -98,15 +98,14 @@ describe("additional application shortcuts", () => {
 		expect(matchesNextSessionShortcut(chord({ key: "Down", ctrl: true }), false)).toBe(false);
 	});
 
-	it("matches Ctrl+Tab on macOS and leaves Ctrl+Tab to the session switcher on Windows and Linux", () => {
-		expect(matchesNextTabShortcut(chord({ key: "Tab", ctrl: true }), true)).toBe(true);
-		expect(matchesPreviousTabShortcut(chord({ key: "Tab", ctrl: true, shift: true }), true)).toBe(true);
-		expect(matchesNextTabShortcut(chord({ key: "Tab", ctrl: true }), false)).toBe(false);
-		expect(matchesPreviousTabShortcut(chord({ key: "Tab", ctrl: true, shift: true }), false)).toBe(false);
-		expect(matchesNextTabShortcut(chord({ key: "PageDown", ctrl: true, shift: true }), false)).toBe(true);
-		expect(matchesPreviousTabShortcut(chord({ key: "PageUp", ctrl: true, shift: true }), false)).toBe(true);
-		const ctrlTab = chord({ key: "Tab", ctrl: true });
-		expect(findConflictingShortcut(ctrlTab, false, {}, "focus-terminal")?.id).toBe("switch-session");
+	it("leaves Ctrl+Tab to the session switcher on every platform", () => {
+		for (const isMac of [true, false]) {
+			expect(matchesNextTabShortcut(chord({ key: "Tab", ctrl: true }), isMac)).toBe(false);
+			expect(matchesPreviousTabShortcut(chord({ key: "Tab", ctrl: true, shift: true }), isMac)).toBe(false);
+			expect(matchesNextTabShortcut(chord({ key: "PageDown", ctrl: true, shift: true }), isMac)).toBe(true);
+			expect(matchesPreviousTabShortcut(chord({ key: "PageUp", ctrl: true, shift: true }), isMac)).toBe(true);
+			expect(findConflictingShortcut(chord({ key: "Tab", ctrl: true }), isMac, {}, "focus-terminal")?.id).toBe("switch-session");
+		}
 	});
 
 	it("matches focus terminal on each platform and rejects extra modifiers", () => {
@@ -123,27 +122,20 @@ describe("additional application shortcuts", () => {
 });
 
 describe("session switcher chord", () => {
-	it("uses Option+Tab on macOS and Ctrl+Tab on Windows and Linux", () => {
-		expect(sessionSwitcherDirection(chord({ key: "Tab", alt: true }), true)).toBe(1);
-		expect(sessionSwitcherDirection(chord({ key: "Tab", alt: true, shift: true }), true)).toBe(-1);
-		expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true }), true)).toBeNull();
-		expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true }), false)).toBe(1);
-		expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true, shift: true }), false)).toBe(-1);
-		expect(sessionSwitcherDirection(chord({ key: "Tab", alt: true }), false)).toBeNull();
-		expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true, meta: true }), false)).toBeNull();
-		expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: false, ctrl: false, type: "keyDown", code: "AltLeft" }, true)).toBe(true);
-		expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: false, ctrl: false, type: "keyDown", code: "AltRight" }, true)).toBe(true);
-		expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: true, ctrl: false, type: "keyUp", code: "AltLeft" }, true)).toBe(true);
-		expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: true, ctrl: false, type: "keyDown" }, true)).toBe(false);
-		expect(isSessionSwitcherModifierRelease({ key: "Tab", alt: false, ctrl: false, type: "keyUp" }, true)).toBe(false);
-		expect(isSessionSwitcherModifierRelease({ key: "Tab", alt: true, ctrl: false, type: "keyUp" }, true)).toBe(false);
-		expect(isSessionSwitcherModifierRelease({ key: "Shift", alt: false, ctrl: false, type: "keyUp" }, true)).toBe(false);
-		expect(isSessionSwitcherModifierRelease({ key: "Control", alt: false, ctrl: false, type: "keyUp" }, false)).toBe(true);
-		expect(isSessionSwitcherModifierRelease({ key: "Control", ctrl: true, alt: false, type: "keyUp", code: "ControlLeft" }, false)).toBe(true);
-		expect(isSessionSwitcherModifierRelease({ key: "Tab", alt: false, ctrl: false, type: "keyUp" }, false)).toBe(false);
-		expect(isSessionSwitcherModifierRelease({ key: "Shift", alt: true, ctrl: false, type: "keyUp" }, true)).toBe(false);
-		expect(defaultShortcutBindings("switch-session", true).map((binding) => binding.alt)).toEqual([true, true]);
-		expect(defaultShortcutBindings("switch-session", false).map((binding) => binding.ctrl)).toEqual([true, true]);
+	it("uses Ctrl+Tab on every platform and ignores Option+Tab", () => {
+		for (const isMac of [true, false]) {
+			expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true }), isMac)).toBe(1);
+			expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true, shift: true }), isMac)).toBe(-1);
+			expect(sessionSwitcherDirection(chord({ key: "Tab", alt: true }), isMac)).toBeNull();
+			expect(sessionSwitcherDirection(chord({ key: "Tab", ctrl: true, meta: true }), isMac)).toBeNull();
+			expect(isSessionSwitcherModifierRelease({ key: "Control", alt: false, ctrl: false, type: "keyUp" }, isMac)).toBe(true);
+			expect(isSessionSwitcherModifierRelease({ key: "Control", ctrl: true, alt: false, type: "keyUp", code: "ControlLeft" }, isMac)).toBe(true);
+			expect(isSessionSwitcherModifierRelease({ key: "Control", ctrl: true, alt: false, type: "keyDown" }, isMac)).toBe(false);
+			expect(isSessionSwitcherModifierRelease({ key: "Alt", alt: false, ctrl: false, type: "keyDown", code: "AltLeft" }, isMac)).toBe(false);
+			expect(isSessionSwitcherModifierRelease({ key: "Tab", alt: false, ctrl: false, type: "keyUp" }, isMac)).toBe(false);
+			expect(defaultShortcutBindings("switch-session", isMac).map((binding) => binding.ctrl)).toEqual([true, true]);
+			expect(defaultShortcutBindings("switch-session", isMac).map((binding) => binding.alt)).toEqual([false, false]);
+		}
 	});
 });
 

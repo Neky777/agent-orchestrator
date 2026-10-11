@@ -1,7 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { aoBridge } from "../lib/bridge";
-import { isMacPlatform } from "../lib/platform";
 import {
 	buildSessionSwitcherEntries,
 	initialSessionSwitcherIndex,
@@ -22,10 +21,10 @@ type OpenSwitcher = {
 };
 
 /**
- * Project session switcher. The main process owns Option+Tab (macOS) and
- * Ctrl+Tab (Windows/Linux), including while xterm, the chat composer, or the
- * embedded browser is focused. This surface does not take DOM focus, so the
- * previous control keeps it when the popup closes.
+ * Project session switcher. The main process owns Ctrl+Tab on every platform,
+ * including while xterm, the chat composer, or the embedded browser is focused.
+ * This surface does not take DOM focus, so the previous control keeps it when
+ * the popup closes.
  */
 export function SessionSwitcher({
 	projectKey,
@@ -107,27 +106,23 @@ export function SessionSwitcher({
 		};
 		const disposeRelease = aoBridge.app.onSessionSwitcherRelease(commitOpenSwitcher);
 		const disposeCancel = aoBridge.app.onSessionSwitcherCancel(closeWithoutCommit);
-		// The shell DOM sees Option-up when focus is in the composer, terminal
-		// textarea, or sidebar. macOS delivers it as keydown with altKey already
-		// false, and sometimes as keyup with altKey still true. getModifierState
-		// is the accurate "still held" signal. Tab keyup is ignored on purpose:
-		// its altKey is often false while Option is still down. The embedded
-		// browser is a separate webContents; the main process covers that focus.
+		// Ctrl-up in the shell DOM, for the composer, terminal textarea, and
+		// sidebar. getModifierState is the "still held" signal. Tab keyup is
+		// ignored: its ctrlKey is often false while Ctrl is still down. The
+		// embedded browser is a separate webContents; the main process covers it.
 		const onKeyboard = (event: KeyboardEvent) => {
 			if (!openRef.current) return;
-			const isMac = isMacPlatform();
-			const modifier = isMac ? "Alt" : "Control";
-			const flagStillDown = event.getModifierState?.(modifier) === true || (isMac ? event.altKey : event.ctrlKey);
+			const ctrlStillDown = event.getModifierState?.("Control") === true || event.ctrlKey;
 			if (
 				!isSessionSwitcherModifierRelease(
 					{
 						key: event.key,
 						code: event.code,
-						alt: isMac ? flagStillDown : event.altKey,
-						ctrl: isMac ? event.ctrlKey : flagStillDown,
+						alt: event.altKey,
+						ctrl: ctrlStillDown,
 						type: event.type === "keyup" ? "keyUp" : event.type,
 					},
-					isMac,
+					false,
 				)
 			) {
 				return;
