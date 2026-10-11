@@ -21,9 +21,9 @@ type OpenSwitcher = {
 };
 
 /**
- * Project session switcher. The main process owns Control+Option+Tab on macOS
- * and Ctrl+` on Windows and Linux, including while xterm, the chat composer,
- * or the embedded browser is focused. Ctrl+Tab still cycles in-session tabs.
+ * Project session switcher. The main process owns Ctrl+` on every platform,
+ * including while xterm, the chat composer, or the embedded browser is focused.
+ * Ctrl+Tab still cycles in-session tabs.
  * This surface does not take DOM focus, so the previous control keeps it when
  * the popup closes.
  */

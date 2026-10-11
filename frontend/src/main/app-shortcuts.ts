@@ -156,8 +156,8 @@ export function attachAppShortcuts(
 		if (isRecording()) return;
 		const switcherDirection = sessionSwitcherDirection(chord, isMac);
 		if (switcherDirection) {
-			// Ctrl+Tab stays the in-session tab shortcut. The switcher is
-			// Control+Option+Tab on macOS and Ctrl+` on Windows and Linux.
+			// Ctrl+Tab stays the in-session tab shortcut. The switcher is Ctrl+`
+			// on every platform.
 			// Repeats advance. The first keydown only opens (the renderer decides).
 			event.preventDefault();
 			if (sessionSwitcherSuppressed) return;

@@ -211,18 +211,16 @@ describe("attachAppShortcuts", () => {
 		expect(event.preventDefault).toHaveBeenCalledTimes(1);
 	});
 
-	it("keeps macOS Ctrl+Tab as next tab and uses Control+Option+Tab for the switcher", () => {
+	it("keeps macOS Ctrl+Tab as next tab and uses Ctrl+backquote for the switcher", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
 		attachAppShortcuts(source, true, target);
 
-		const optionTab = source.emit({ key: "Tab", alt: true });
 		const nextTab = source.emit({ key: "Tab", control: true });
-		const open = source.emit({ key: "Tab", control: true, alt: true });
-		const again = source.emit({ key: "Tab", control: true, alt: true, isAutoRepeat: true });
+		const open = source.emit({ key: "`", code: "Backquote", control: true });
+		const again = source.emit({ key: "`", code: "Backquote", control: true, isAutoRepeat: true });
 		const release = source.emit({ key: "Control", code: "ControlLeft", control: false, type: "keyUp" });
 
-		expect(optionTab.preventDefault).not.toHaveBeenCalled();
 		expect(target.send).toHaveBeenNthCalledWith(1, NEXT_TAB_SHORTCUT_CHANNEL);
 		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, 1);
 		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_STEP_CHANNEL, 1);
@@ -234,33 +232,33 @@ describe("attachAppShortcuts", () => {
 		expect(target.focus).not.toHaveBeenCalled();
 	});
 
-	it("commits once on Ctrl, in either release order, and ignores Tab and Shift keyup", () => {
+	it("commits once on Ctrl, in either release order, and ignores the cycle key and Shift keyup", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
 		attachAppShortcuts(source, true, target);
 
-		source.emit({ key: "Tab", control: true, alt: true });
-		source.emit({ key: "Tab", control: true, alt: true });
-		const tabUpWhileCtrlHeld = source.emit({ key: "Tab", control: false, alt: false, type: "keyUp" });
+		source.emit({ key: "`", code: "Backquote", control: true });
+		source.emit({ key: "`", code: "Backquote", control: true });
+		const cycleUpWhileCtrlHeld = source.emit({ key: "`", code: "Backquote", control: false, type: "keyUp" });
 		const shiftUp = source.emit({ key: "Shift", code: "ShiftLeft", control: false, type: "keyUp" });
 		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
-		expect(tabUpWhileCtrlHeld.preventDefault).not.toHaveBeenCalled();
+		expect(cycleUpWhileCtrlHeld.preventDefault).not.toHaveBeenCalled();
 		expect(shiftUp.preventDefault).not.toHaveBeenCalled();
 
-		const ctrlUpAfterTab = source.emit({ key: "Control", code: "ControlLeft", control: true, type: "keyUp" });
-		const tabUpAfterCommit = source.emit({ key: "Tab", control: false, type: "keyUp" });
-		expect(ctrlUpAfterTab.preventDefault).toHaveBeenCalledOnce();
-		expect(tabUpAfterCommit.preventDefault).not.toHaveBeenCalled();
+		const ctrlUpAfterCycle = source.emit({ key: "Control", code: "ControlLeft", control: true, type: "keyUp" });
+		const cycleUpAfterCommit = source.emit({ key: "`", code: "Backquote", control: false, type: "keyUp" });
+		expect(ctrlUpAfterCycle.preventDefault).toHaveBeenCalledOnce();
+		expect(cycleUpAfterCommit.preventDefault).not.toHaveBeenCalled();
 		expect(target.send).toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
 		expect(target.send.mock.calls.filter((call) => call[0] === SESSION_SWITCHER_RELEASE_CHANNEL)).toHaveLength(1);
 
 		target.send.mockClear();
-		source.emit({ key: "Tab", control: true, alt: true, shift: true });
-		source.emit({ key: "Tab", code: "Tab", control: true, alt: true, shift: true, isAutoRepeat: true });
+		source.emit({ key: "~", code: "Backquote", control: true, shift: true });
+		source.emit({ key: "~", code: "Backquote", control: true, shift: true, isAutoRepeat: true });
 		const ctrlFirst = source.emit({ key: "Control", code: "ControlRight", control: false, type: "keyUp" });
-		const tabAfterCtrl = source.emit({ key: "Tab", control: false, type: "keyUp" });
+		const cycleAfterCtrl = source.emit({ key: "`", code: "Backquote", control: false, type: "keyUp" });
 		expect(ctrlFirst.preventDefault).toHaveBeenCalledOnce();
-		expect(tabAfterCtrl.preventDefault).not.toHaveBeenCalled();
+		expect(cycleAfterCtrl.preventDefault).not.toHaveBeenCalled();
 		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, -1);
 		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, -1);
 		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_RELEASE_CHANNEL);
