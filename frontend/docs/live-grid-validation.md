@@ -2,6 +2,8 @@
 
 Ветка: `feature/live-grid`. База: `c087cb02ee016620d5e9dcfe7dd9487c0b1b12c1` из официального OrchestratorInc/agent-orchestrator. Исполняемый код приложения собран из `dad07934`; последующие изменения относятся к проверкам и документации.
 
+Черновой PR: [OrchestratorInc/agent-orchestrator#6549](https://github.com/OrchestratorInc/agent-orchestrator/pull/6549).
+
 ## Что реализовано
 
 - Open Grid рядом с Open Kanban; отдельный маршрут проекта внутри существующего Electron-приложения.
@@ -27,6 +29,8 @@
 | --- | --- |
 | Полный frontend Vitest | 430 файлов; 7081 прошёл, 6 штатно пропущены; без необработанных ошибок |
 | TypeScript frontend и E2E | прошли |
+| Self-hosted lockfile compatibility | npm ci dry run прошёл на закреплённом Node 22.23.2 |
+| Gitleaks 7.4.0 | новые коммиты проверены с конфигурацией CI; утечек не найдено |
 | Grid E2E в Electron 33 | 9 сценариев прошли |
 | product-ui | 157 тестов; типизация, сборка и pack dry run прошли |
 | cloud-client | генерация без дрейфа схемы, типизация, 29 тестов и pack dry run прошли |
@@ -55,7 +59,7 @@
 - Сборка локально подписана ad hoc; Developer ID и Apple notarization отсутствуют. Канонический verify-mac-artifact.sh подтверждает seal и ACP entitlements, но завершается с ожидаемой ошибкой отсутствующего stapled ticket. Gatekeeper release approval не подтверждён: на тестовой машине spctl сообщает уже существовавший override=security disabled; настройки безопасности не изменялись.
 - Intel cross-link helper недоступен в установленном Apple SDK: libswiftCompatibilityConcurrency/56/Packs содержит только arm64/arm64e. Проверка Intel должна пройти на macos-26-intel CI. Windows/Linux packaging и полный Linux renderer-smoke не проверены на этом Mac; Docker отсутствует.
 - Дополнительный полный Go-прогон был остановлен после ошибок в неизменённых OpenCode discovery/version тестах из-за установленного системного OpenCode. Backend не изменён, Go workflow этой веткой не затрагивается. Полный Go/race проход не заявляется.
-- Node 22.23.2 compatibility не проверена; npm lockfile dry run прошёл с установленным Node 24. Production publish, update/replacement установленного AO и миграция реальных данных не выполнялись.
+- Удалённые Frontend и gitleaks workflows получили `action_required` без запуска jobs: требуется одобрение сопровождающего репозитория для PR из fork. Проход удалённого CI не заявляется. Production publish, update/replacement установленного AO и миграция реальных данных не выполнялись.
 
 ## Готовое приложение и безопасная проверка
 
