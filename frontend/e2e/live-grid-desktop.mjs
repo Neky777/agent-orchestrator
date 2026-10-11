@@ -269,6 +269,20 @@ try {
 	assert.ok(Math.abs((await panels.first().boundingBox()).width - width) < 2);
 	assert.deepEqual(launches(), baseline, "Changing presentation must not launch provider processes");
 	for (const entry of baseline) process.kill(entry.pid, 0);
+	// Deliver the real desktop settings command to this app's renderer. CDP key
+	// injection does not reliably dispatch macOS menu shortcuts to BaseWindow.
+	await app.evaluate(({ webContents }, url) => {
+		webContents
+			.getAllWebContents()
+			.find((contents) => contents.getURL() === url)
+			?.send("app:open-settings");
+	}, page.url());
+	await page.getByRole("button", { name: "Theme", exact: true }).click();
+	await page.getByRole("menuitem", { name: "Dark", exact: true }).click();
+	await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("dark");
+	await page.getByRole("button", { name: "Close settings", exact: true }).click();
+	await expect(page.getByRole("dialog")).toHaveCount(0);
+	await page.screenshot({ path: path.join(root, "evidence", "desktop-dark.png") });
 	await api("POST", `/sessions/${sessions.at(-1)}/kill`, {});
 	await expect(panels).toHaveCount(11, { timeout: 20_000 });
 	await page.getByRole("checkbox", { name: "Show completed" }).check();
@@ -289,6 +303,10 @@ try {
 				sessions,
 				providerPids: baseline.map((entry) => entry.pid),
 				metrics,
+				savedLayout: await page.evaluate(
+					(id) => localStorage.getItem(`ao.live-grid.v1.${encodeURIComponent(id)}`),
+					project,
+				),
 				errors,
 				passed: true,
 			},
@@ -310,3 +328,79 @@ try {
 	await app.evaluate(({ app }) => app.exit(0)).catch(() => {});
 	await app.close().catch(() => {});
 }
+
+// Re-open the same isolated Chromium profile and database with stopped fixtures.
+// This checks durable layout without asking the daemon to restore any provider.
+if (sessionMode === "mixed") {
+	const proofPath = path.join(root, "verification.json");
+	const proof = JSON.parse(fs.readFileSync(proofPath, "utf8"));
+	await expect
+		.poll(
+			async () => {
+				try {
+					await api("GET", "/projects");
+					return false;
+				} catch {
+					return true;
+				}
+			},
+			{ timeout: 20_000 },
+		)
+		.toBe(true);
+	const reopened = await _electron.launch({
+		executablePath: path.join(bundle, "Contents/MacOS/agent-orchestrator"),
+		args: [],
+		env,
+		timeout: 60_000,
+	});
+	try {
+		const page = await reopened.firstWindow();
+		await expect
+			.poll(
+				async () => {
+					try {
+						return ((await api("GET", "/projects")).projects ?? []).length;
+					} catch {
+						return 0;
+					}
+				},
+				{ timeout: 60_000 },
+			)
+			.toBe(1);
+		await page.evaluate((id) => {
+			window.location.hash = `/projects/${id}/grid`;
+		}, proof.project);
+		await expect(page.getByTestId("grid-panel")).toHaveCount(12, { timeout: 30_000 });
+		assert.equal(
+			await page.evaluate(
+				(id) => localStorage.getItem(`ao.live-grid.v1.${encodeURIComponent(id)}`),
+				proof.project,
+			),
+			proof.savedLayout,
+		);
+		assert.equal(launches().length, 12, "Reopening stopped Grid history must not start providers");
+		await page.screenshot({ path: path.join(root, "evidence", "desktop-restarted.png") });
+		proof.restartPassed = true;
+		fs.writeFileSync(proofPath, JSON.stringify(proof, null, 2));
+		console.log("PASS: layout survived a real Electron restart without provider launches");
+	} finally {
+		await reopened.evaluate(({ app }) => app.exit(0)).catch(() => {});
+		await reopened.close().catch(() => {});
+	}
+}
+
+// The supervisor closes its owned daemon asynchronously after Electron exits.
+// Wait for that graceful exit before another isolated run reserves this port.
+await expect
+	.poll(
+		async () => {
+			try {
+				await api("GET", "/projects");
+				return false;
+			} catch {
+				return true;
+			}
+		},
+		{ timeout: 20_000 },
+	)
+	.toBe(true);

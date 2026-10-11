@@ -39,6 +39,15 @@ npm run build:acp-runtime
 AO_BUILD_VARIANT=live-grid-lab npx electron-forge package --platform=darwin --arch=arm64
 ```
 
+For a local unsigned lab bundle, seal it with ad hoc signing while preserving the bundled executables' entitlements:
+
+```sh
+codesign --force --deep --sign - --timestamp=none --preserve-metadata=entitlements,flags '/path/to/Agent Orchestrator Live Grid.app'
+bash scripts/verify-mac-artifact.sh '/path/to/Agent Orchestrator Live Grid.app'
+```
+
+The canonical verifier checks the seal and ACP Node entitlements. An ad hoc build has no Apple notarization ticket, so its stapler check is expected to fail. Production signing/notarization belongs to the normal release conductor.
+
 The bundle is named **Agent Orchestrator Live Grid.app**, with bundle ID `dev.agent-orchestrator.live-grid-lab`. It forces a separate data directory, run file, Electron profile and tmux socket, even if ordinary AO environment variables are inherited. Its default root is `~/.ao/live-grid-lab`, and its port is 32191. `AO_LIVE_GRID_LAB_ROOT` and `AO_LIVE_GRID_LAB_PORT` can select another isolated root and unused port.
 
 This build disables updates, automatic relocation to Applications, stale-copy retirement and registration of the production deep-link protocol. Cloud state and the Browser runtime also use its isolated root. It does not attach to installed AO sessions. Open a disposable project in it; keep commercial projects in the installed version.
