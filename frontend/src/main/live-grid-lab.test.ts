@@ -23,7 +23,11 @@ it("rejects aliases and state subdirectories that escape through symlinks", () =
 		const alias = path.join(home, "alias");
 		symlinkSync(production, alias, process.platform === "win32" ? "junction" : "dir");
 		expect(() => isolatedLiveGridRoot(alias, home)).toThrow("own state directory");
-		symlinkSync(path.join(production, "data"), path.join(lab, "data"), process.platform === "win32" ? "junction" : "dir");
+		symlinkSync(
+			path.join(production, "data"),
+			path.join(lab, "data"),
+			process.platform === "win32" ? "junction" : "dir",
+		);
 		expect(() => isolatedLiveGridRoot(lab, home)).toThrow("inside its isolated directory");
 	} finally {
 		rmSync(home, { recursive: true, force: true });

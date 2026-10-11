@@ -13,7 +13,7 @@ Live Grid is a project presentation route, `/projects/:projectId/grid`. Open it 
 
 ## Layout and controls
 
-The layout enumerates readable column counts for the measured workspace, then minimizes a score combining cell aspect ratio (target 1.35), unused cells and required scrolling. Cells have minimum dimensions of **360 × 280 CSS pixels**. When all rows cannot fit, the workspace scrolls instead of compressing terminals. A narrow workspace may also scroll horizontally.
+The layout enumerates readable column counts for the measured workspace, then minimizes a score combining cell aspect ratio (target 1.35), unused cells and required scrolling. Cells have minimum dimensions of **360 × 280 CSS pixels**, with a **360 pixel minimum height when Chat is present** to leave room for its transcript and composer. When all rows cannot fit, the workspace scrolls instead of compressing terminals. A narrow workspace may also scroll horizontally.
 
 The orchestrator occupies the first cell in row order. Workers have stable keys and remain sibling components when the shape changes. Column and row dividers resize adjacent tracks while preserving their combined size and minimum dimensions. Window resizing redistributes saved proportions with a water-filling algorithm, clamping each track to its minimum.
 

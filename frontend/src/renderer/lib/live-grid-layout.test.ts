@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import type { WorkspaceSession } from "../types/workspace";
 import {
 	GRID_MIN_HEIGHT,
+	GRID_CHAT_MIN_HEIGHT,
 	GRID_MIN_WIDTH,
 	gridSessions,
 	gridShape,
@@ -24,6 +25,13 @@ const session = (id: string, extra: Partial<WorkspaceSession> = {}): WorkspaceSe
 	...extra,
 });
 beforeEach(() => localStorage.clear());
+
+it("reserves a taller readable workspace for Chat transcripts and composers", () => {
+	const shape = gridShape(12, 1500, 800, GRID_CHAT_MIN_HEIGHT);
+	const rows = gridTracks(shape.rows, 800, GRID_CHAT_MIN_HEIGHT);
+	expect(rows.every((height) => height >= GRID_CHAT_MIN_HEIGHT)).toBe(true);
+	expect(rows.reduce((sum, height) => sum + height, 0)).toBeGreaterThan(800);
+});
 
 describe("Live Grid session selection", () => {
 	it("pins the existing orchestrator while workers arrive, finish, and stream updates", () => {

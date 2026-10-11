@@ -26,7 +26,9 @@ fs.writeFileSync(providerLog, "");
 const provider = path.resolve("e2e/support/live-grid-agent.cjs");
 const quote = (text) => "'" + text.replaceAll("'", "'\\''") + "'";
 const shim = path.join(bin, "opencode");
-fs.writeFileSync(shim, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(provider)} "$@"\n`, { mode: 0o700 });
+fs.writeFileSync(shim, `#!/bin/sh\nexec ${quote(process.execPath)} ${quote(provider)} "$@"\n`, {
+	mode: 0o700,
+});
 const shell = path.join(bin, "fixture-shell");
 fs.writeFileSync(
 	shell,
@@ -159,9 +161,21 @@ try {
 	}, project);
 	const panels = page.getByTestId("grid-panel");
 	for (const count of [1, 2, 4, 6, 9, 12]) {
-		while (sessions.length < count) await spawn("worker", sessionMode === "mixed" ? (sessions.length < 3 ? "chat" : "tui") : sessionMode, sessions.length);
+		while (sessions.length < count)
+			await spawn(
+				"worker",
+				sessionMode === "mixed" ? (sessions.length < 3 ? "chat" : "tui") : sessionMode,
+				sessions.length,
+			);
 		await expect(panels).toHaveCount(count, { timeout: 30_000 });
 		await expect(panels.first()).toHaveAttribute("data-session-id", orchestrator);
+		await expect
+			.poll(() =>
+				panels.evaluateAll((elements) =>
+					Math.min(...elements.map((element) => element.getBoundingClientRect().height)),
+				),
+			)
+			.toBeGreaterThanOrEqual(sessionMode === "tui" ? 280 : 360);
 		await expect.poll(() => launches().length, { timeout: 30_000 }).toBe(count);
 		await page.screenshot({ path: path.join(root, "evidence", `desktop-${count}.png`) });
 		console.log(`Verified ${count} existing sessions in packaged Electron`);
@@ -171,38 +185,77 @@ try {
 	const chat = worker(sessions[1]);
 	const draft = chat.getByRole("combobox", { name: "Message the agent" });
 	if (sessionMode !== "tui") {
-	await draft.fill("isolated-grid-chat-input");
-	await draft.press("Enter");
-	await expect(chat.getByRole("log", { name: "Conversation" })).toContainText("isolated-grid-chat-input", {
-		timeout: 20_000,
-	});
-	await expect.poll(() => records().some((entry) => entry.event === "input" && entry.session === sessions[1] && entry.text.includes("isolated-grid-chat-input")), { timeout: 20_000 }).toBe(true);
-	await expect(draft).toHaveText("");
-	await draft.fill("persistent grid draft");
+		await draft.fill("isolated-grid-chat-input");
+		await draft.press("Enter");
+		await expect(chat.getByRole("log", { name: "Conversation" })).toContainText("isolated-grid-chat-input", {
+			timeout: 20_000,
+		});
+		await expect
+			.poll(
+				() =>
+					records().some(
+						(entry) =>
+							entry.event === "input" &&
+							entry.session === sessions[1] &&
+							entry.text.includes("isolated-grid-chat-input"),
+					),
+				{ timeout: 20_000 },
+			)
+			.toBe(true);
+		await expect
+			.poll(async () => (await api("GET", `/sessions/${sessions[1]}/conversation`)).turns.at(-1)?.state, {
+				timeout: 30_000,
+			})
+			.toBe("completed");
+		await expect(draft).toHaveText("");
+		await draft.pressSequentially("persistent grid draft");
+		await expect(draft).toHaveText("persistent grid draft");
 	}
 	const tui = worker(sessions[3]);
 	if (sessionMode !== "chat") {
-	assert.equal(await page.evaluate(() => window.__gridSockets.length), 1, "All local terminals share one mux socket");
-	await tui.locator(".xterm-helper-textarea").focus();
-	await page.keyboard.type("isolated-grid-tui-input");
-	await expect
-		.poll(
-			() =>
-				records()
-					.filter((entry) => entry.event === "input" && entry.session === sessions[3])
-					.map((entry) => entry.text)
-					.join(""),
-			{ timeout: 10_000 },
-		)
-		.toContain("isolated-grid-tui-input");
-	await page.evaluate(() => window.__gridSockets[0].close());
-	await expect.poll(() => page.evaluate(() => window.__gridSockets.filter((socket) => socket.readyState === WebSocket.OPEN).length), { timeout: 20_000 }).toBe(1);
-	await tui.locator(".xterm-helper-textarea").focus();
-	await page.keyboard.type("reconnected-grid-input");
-	await expect.poll(() => records().filter((entry) => entry.event === "input" && entry.session === sessions[3]).map((entry) => entry.text).join(""), { timeout: 10_000 }).toContain("reconnected-grid-input");
+		assert.equal(
+			await page.evaluate(() => window.__gridSockets.length),
+			1,
+			"All local terminals share one mux socket",
+		);
+		await tui.locator(".xterm-helper-textarea").focus();
+		await page.keyboard.type("isolated-grid-tui-input");
+		await expect
+			.poll(
+				() =>
+					records()
+						.filter((entry) => entry.event === "input" && entry.session === sessions[3])
+						.map((entry) => entry.text)
+						.join(""),
+				{ timeout: 10_000 },
+			)
+			.toContain("isolated-grid-tui-input");
+		await page.evaluate(() => window.__gridSockets[0].close());
+		await expect
+			.poll(
+				() =>
+					page.evaluate(
+						() => window.__gridSockets.filter((socket) => socket.readyState === WebSocket.OPEN).length,
+					),
+				{ timeout: 20_000 },
+			)
+			.toBe(1);
+		await tui.locator(".xterm-helper-textarea").focus();
+		await page.keyboard.type("reconnected-grid-input");
+		await expect
+			.poll(
+				() =>
+					records()
+						.filter((entry) => entry.event === "input" && entry.session === sessions[3])
+						.map((entry) => entry.text)
+						.join(""),
+				{ timeout: 10_000 },
+			)
+			.toContain("reconnected-grid-input");
 	}
 	await chat.getByTestId("grid-panel-header").dblclick();
 	await expect(tui).toBeHidden();
+	await page.screenshot({ path: path.join(root, "evidence", "desktop-maximized.png") });
 	await chat.getByRole("button", { name: "Restore grid" }).click();
 	const separator = page.getByRole("separator", { name: "Resize columns" }).first();
 	await separator.focus();

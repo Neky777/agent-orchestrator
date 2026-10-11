@@ -5,8 +5,10 @@ import { canonicalPathInside, sameCanonicalPath } from "../shared/path-identity"
 export function isolatedLiveGridRoot(root: string, home: string): string {
 	const resolved = path.resolve(root);
 	const aoRoot = path.join(home, ".ao");
-	if (sameCanonicalPath(resolved, aoRoot) || ["data", "electron", "br", "dev"].some((name) =>
-		canonicalPathInside(resolved, path.join(aoRoot, name)))) {
+	if (
+		sameCanonicalPath(resolved, aoRoot) ||
+		["data", "electron", "br", "dev"].some((name) => canonicalPathInside(resolved, path.join(aoRoot, name)))
+	) {
 		throw new Error("The Live Grid lab requires its own state directory.");
 	}
 	for (const name of ["data", "electron", "br", "running.json"]) {

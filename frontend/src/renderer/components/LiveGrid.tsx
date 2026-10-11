@@ -19,6 +19,7 @@ import { SessionViewportContext, sessionViewportState } from "../lib/session-vie
 import {
 	GRID_GAP,
 	GRID_MIN_HEIGHT,
+	GRID_CHAT_MIN_HEIGHT,
 	GRID_MIN_WIDTH,
 	gridCompleted,
 	gridSessions,
@@ -61,10 +62,12 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 	const drag = useRef<Drag | undefined>(undefined);
 	const selection = useMemo(() => gridSessions(sessions, preferences), [sessions, preferences]);
 	const panels = [selection.orchestrator, ...selection.visible];
-	const shape = gridShape(panels.length, bounds.width, bounds.height);
+	// Chat's transcript and composer need more vertical room than an xterm.
+	const minimumHeight = panels.some((session) => session?.mode === "chat") ? GRID_CHAT_MIN_HEIGHT : GRID_MIN_HEIGHT;
+	const shape = gridShape(panels.length, bounds.width, bounds.height, minimumHeight);
 	const shapeKey = `${shape.columns}x${shape.rows}`;
 	const width = Math.max(bounds.width, shape.columns * GRID_MIN_WIDTH + (shape.columns - 1) * GRID_GAP);
-	const height = Math.max(bounds.height, shape.rows * GRID_MIN_HEIGHT + (shape.rows - 1) * GRID_GAP);
+	const height = Math.max(bounds.height, shape.rows * minimumHeight + (shape.rows - 1) * GRID_GAP);
 	const storedSplit = preferences.splits[shapeKey];
 	const columns = gridTracks(
 		shape.columns,
@@ -72,7 +75,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 		GRID_MIN_WIDTH,
 		storedSplit?.columns,
 	);
-	const rows = gridTracks(shape.rows, height - (shape.rows - 1) * GRID_GAP, GRID_MIN_HEIGHT, storedSplit?.rows);
+	const rows = gridTracks(shape.rows, height - (shape.rows - 1) * GRID_GAP, minimumHeight, storedSplit?.rows);
 	const offsets = (tracks: number[]) =>
 		tracks.map((_, index) => tracks.slice(0, index).reduce((sum, value) => sum + value + GRID_GAP, 0));
 	const left = offsets(columns);
@@ -160,7 +163,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 				current.tracks,
 				current.index,
 				position - current.origin,
-				current.axis === "columns" ? GRID_MIN_WIDTH : GRID_MIN_HEIGHT,
+				current.axis === "columns" ? GRID_MIN_WIDTH : minimumHeight,
 			),
 		);
 	};
@@ -301,7 +304,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 											aria-label={t(axis === "columns" ? "grid.resizeColumns" : "grid.resizeRows")}
 											aria-orientation={axis === "columns" ? "vertical" : "horizontal"}
 											aria-valuenow={Math.round(track)}
-											aria-valuemin={axis === "columns" ? GRID_MIN_WIDTH : GRID_MIN_HEIGHT}
+											aria-valuemin={axis === "columns" ? GRID_MIN_WIDTH : minimumHeight}
 											className={`absolute z-10 rounded-sm bg-border/50 hover:bg-accent/60 focus-visible:bg-accent/60 focus-visible:outline-none ${axis === "columns" ? "cursor-col-resize" : "cursor-row-resize"}`}
 											style={
 												axis === "columns"
@@ -331,7 +334,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 														axis === "columns" ? columns : rows,
 														index,
 														(event.key === negative ? -1 : 1) * (event.shiftKey ? 50 : 10),
-														axis === "columns" ? GRID_MIN_WIDTH : GRID_MIN_HEIGHT,
+														axis === "columns" ? GRID_MIN_WIDTH : minimumHeight,
 													),
 												);
 											}}

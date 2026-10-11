@@ -7,6 +7,7 @@ import {
 
 export const GRID_MIN_WIDTH = 360;
 export const GRID_MIN_HEIGHT = 280;
+export const GRID_CHAT_MIN_HEIGHT = 360;
 export const GRID_GAP = 6;
 
 export type GridPreferences = {
@@ -57,7 +58,7 @@ export function gridSessions(sessions: WorkspaceSession[], preferences: GridPref
 }
 
 /** Choose readable cells, penalizing empty cells and required scrolling. */
-export function gridShape(count: number, width: number, height: number) {
+export function gridShape(count: number, width: number, height: number, minimumHeight = GRID_MIN_HEIGHT) {
 	count = Math.max(1, count);
 	width = Math.max(1, width);
 	height = Math.max(1, height);
@@ -67,7 +68,7 @@ export function gridShape(count: number, width: number, height: number) {
 		const rows = Math.ceil(count / columns);
 		const cellWidth =
 			(Math.max(width, columns * GRID_MIN_WIDTH + (columns - 1) * GRID_GAP) - (columns - 1) * GRID_GAP) / columns;
-		const cellHeight = Math.max(GRID_MIN_HEIGHT, (height - (rows - 1) * GRID_GAP) / rows);
+		const cellHeight = Math.max(minimumHeight, (height - (rows - 1) * GRID_GAP) / rows);
 		const scroll = Math.max(0, (rows * cellHeight + (rows - 1) * GRID_GAP) / height - 1);
 		const score =
 			Math.abs(Math.log(cellWidth / cellHeight / 1.35)) + ((columns * rows - count) / count) * 0.7 + scroll * 0.5;
