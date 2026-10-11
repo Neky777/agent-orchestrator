@@ -232,6 +232,39 @@ describe("attachAppShortcuts", () => {
 		expect(target.focus).not.toHaveBeenCalled();
 	});
 
+	it("commits once on the modifier key, in either release order, and ignores Tab and Shift keyup", () => {
+		const source = fakeSource();
+		const target = fakeTarget();
+		attachAppShortcuts(source, true, target);
+
+		source.emit({ key: "Tab", alt: true });
+		source.emit({ key: "Tab", alt: true });
+		const tabUpWhileOptionHeld = source.emit({ key: "Tab", alt: false, type: "keyUp" });
+		const shiftUp = source.emit({ key: "Shift", code: "ShiftLeft", alt: false, type: "keyUp" });
+		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
+		expect(tabUpWhileOptionHeld.preventDefault).not.toHaveBeenCalled();
+		expect(shiftUp.preventDefault).not.toHaveBeenCalled();
+
+		const optionUpAfterTab = source.emit({ key: "Alt", code: "AltLeft", alt: true, type: "keyUp" });
+		const tabUpAfterCommit = source.emit({ key: "Tab", alt: false, type: "keyUp" });
+		expect(optionUpAfterTab.preventDefault).toHaveBeenCalledOnce();
+		expect(tabUpAfterCommit.preventDefault).not.toHaveBeenCalled();
+		expect(target.send).toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
+		expect(target.send.mock.calls.filter((call) => call[0] === SESSION_SWITCHER_RELEASE_CHANNEL)).toHaveLength(1);
+
+		target.send.mockClear();
+		source.emit({ key: "Tab", alt: true, shift: true });
+		source.emit({ key: "Tab", code: "Tab", alt: true, shift: true, isAutoRepeat: true });
+		const optionFirst = source.emit({ key: "Alt", code: "AltRight", alt: false, type: "keyDown" });
+		const tabAfterOption = source.emit({ key: "Tab", alt: false, type: "keyUp" });
+		expect(optionFirst.preventDefault).toHaveBeenCalledOnce();
+		expect(tabAfterOption.preventDefault).not.toHaveBeenCalled();
+		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, -1);
+		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, -1);
+		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_RELEASE_CHANNEL);
+		expect(target.send).toHaveBeenCalledTimes(3);
+	});
+
 	it("owns Ctrl+Tab on Windows and Linux, including backward, escape, and focus loss", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
@@ -261,6 +294,19 @@ describe("attachAppShortcuts", () => {
 		source.emit({ key: "Control", type: "keyUp" });
 		expect(target.send).toHaveBeenCalledTimes(5);
 		expect(target.send).toHaveBeenNthCalledWith(5, SESSION_SWITCHER_CANCEL_CHANNEL);
+		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
+
+		target.send.mockClear();
+		const reopened = source.emit({ key: "Tab", control: true });
+		source.emit({ key: "Escape" });
+		cancelSessionSwitcherForFocusLoss();
+		source.emit({ key: "Control", type: "keyUp" });
+		const again = source.emit({ key: "Tab", control: true });
+		expect(reopened.preventDefault).toHaveBeenCalled();
+		expect(again.preventDefault).toHaveBeenCalled();
+		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, 1);
+		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_CANCEL_CHANNEL);
+		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_STEP_CHANNEL, 1);
 		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
 	});
 

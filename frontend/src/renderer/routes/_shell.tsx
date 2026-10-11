@@ -67,7 +67,7 @@ import { remoteWorkspaceQueryKey } from "../hooks/useWorkspaceQuery";
 import { clientForHost } from "../lib/host-clients";
 import { useCloudSession } from "../lib/cloud-session";
 import { openRemoteOrchestrator } from "../lib/remote-orchestrator";
-import { projectNavigateTarget, sessionNavigateTarget } from "../lib/navigate-to-session";
+import { projectNavigateTarget, sessionNavigateTarget, useNavigateToSession } from "../lib/navigate-to-session";
 import { sessionUiKey } from "../lib/hosts";
 import { recordManualWorkerOpen, recordSessionSurface } from "../lib/session-management-telemetry";
 
@@ -212,6 +212,7 @@ function ShellLayout() {
 	useAgentInventoryTelemetry();
 	const { t } = useTranslation();
 	const navigate = useNavigate();
+	const navigateToSession = useNavigateToSession();
 	const matchRoute = useMatchRoute();
 	const queryClient = useQueryClient();
 	const { client: cloudClient } = useCloudCp();
@@ -1406,8 +1407,11 @@ function ShellLayout() {
 						onCommit={(sessionId) => {
 							if (!switcherProjectId) return;
 							const session = switcherSessions.find((item) => item.id === sessionId);
-							if (session?.kind === "worker") recordManualWorkerOpen(sessionUiKey(sessionId, routeParams.hostId));
-							void navigate(sessionNavigateTarget(switcherProjectId, sessionId, routeParams.hostId));
+							// Same open path as a sidebar row, a kanban card, and a
+							// canonical session link: useNavigateToSession carries local,
+							// remote host, and cloud project identity.
+							if (session?.kind === "worker") recordManualWorkerOpen(session.id, routeParams.hostId);
+							navigateToSession(switcherProjectId, sessionId, routeParams.hostId);
 						}}
 						projectKey={switcherProjectId ? `${routeParams.hostId ?? "local"}:${switcherProjectId}` : undefined}
 						sessions={switcherSessions}

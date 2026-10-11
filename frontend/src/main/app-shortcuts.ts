@@ -76,10 +76,13 @@ export function resetSessionSwitcherShortcutState(): void {
 
 /** OS focus left the window. Dismiss without navigating. A later modifier release must not navigate. */
 export function cancelSessionSwitcherForFocusLoss(): void {
-	if (!sessionSwitcherArmed) return;
+	const armed = sessionSwitcherArmed;
+	// Escape leaves the gesture suppressed until the modifier comes up. Blur
+	// must clear that too. Otherwise the release happens outside the window
+	// and the next Option+Tab or Ctrl+Tab is swallowed.
 	sessionSwitcherArmed = false;
 	sessionSwitcherSuppressed = false;
-	sessionSwitcherSend?.(SESSION_SWITCHER_CANCEL_CHANNEL);
+	if (armed) sessionSwitcherSend?.(SESSION_SWITCHER_CANCEL_CHANNEL);
 }
 
 const appShortcutChannel = (

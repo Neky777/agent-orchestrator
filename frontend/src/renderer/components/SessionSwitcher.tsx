@@ -107,20 +107,27 @@ export function SessionSwitcher({
 		};
 		const disposeRelease = aoBridge.app.onSessionSwitcherRelease(commitOpenSwitcher);
 		const disposeCancel = aoBridge.app.onSessionSwitcherCancel(closeWithoutCommit);
-		// macOS delivers Option-up as a DOM keydown with altKey already false,
-		// and often never emits keyup. Listen here as well as in the main process.
+		// The shell DOM sees Option-up when focus is in the composer, terminal
+		// textarea, or sidebar. macOS delivers it as keydown with altKey already
+		// false, and sometimes as keyup with altKey still true. getModifierState
+		// is the accurate "still held" signal. Tab keyup is ignored on purpose:
+		// its altKey is often false while Option is still down. The embedded
+		// browser is a separate webContents; the main process covers that focus.
 		const onKeyboard = (event: KeyboardEvent) => {
 			if (!openRef.current) return;
+			const isMac = isMacPlatform();
+			const modifier = isMac ? "Alt" : "Control";
+			const flagStillDown = event.getModifierState?.(modifier) === true || (isMac ? event.altKey : event.ctrlKey);
 			if (
 				!isSessionSwitcherModifierRelease(
 					{
 						key: event.key,
 						code: event.code,
-						alt: event.altKey,
-						ctrl: event.ctrlKey,
+						alt: isMac ? flagStillDown : event.altKey,
+						ctrl: isMac ? event.ctrlKey : flagStillDown,
 						type: event.type === "keyup" ? "keyUp" : event.type,
 					},
-					isMacPlatform(),
+					isMac,
 				)
 			) {
 				return;

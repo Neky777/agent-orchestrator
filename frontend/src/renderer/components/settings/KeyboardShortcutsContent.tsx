@@ -6,6 +6,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
 	APP_SHORTCUTS,
 	effectiveShortcutBindings,
+	findConflictingShortcut,
 	matchesShortcutBinding,
 	shortcutBindingLabel,
 	shortcutBindingValidationError,
@@ -229,13 +230,7 @@ export function KeyboardShortcutsContent({
 				endRecording();
 				return;
 			}
-			const conflicting = APP_SHORTCUTS.find(
-				(shortcut) =>
-					shortcut.id !== recording.id &&
-					effectiveShortcutBindings(shortcut.id, isMac, overrides).some((existing) =>
-						matchesShortcutBinding(candidate, existing),
-					),
-			);
+			const conflicting = findConflictingShortcut(candidate, isMac, overrides, recording.id);
 			if (conflicting) {
 				if (conflicting.customizable === false) {
 					showToast({

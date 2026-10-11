@@ -1,6 +1,7 @@
 import { act, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { aoBridge } from "../lib/bridge";
+import { isMacPlatform } from "../lib/platform";
 import type { WorkspaceSession } from "../types/workspace";
 import { SessionSwitcher } from "./SessionSwitcher";
 
@@ -119,6 +120,56 @@ describe("SessionSwitcher", () => {
 		);
 		act(() => handlers.release?.());
 		expect(onCommit).not.toHaveBeenCalled();
+	});
+
+	it("does not commit when Tab or Shift comes up while Option is still held, then commits once on Option", () => {
+		const onCommit = vi.fn();
+		render(
+			<SessionSwitcher
+				currentSessionId="A"
+				kanban={false}
+				onCommit={onCommit}
+				projectKey="local:proj"
+				sessions={[session("A", "2026-01-03T00:00:00Z"), session("B", "2026-01-02T00:00:00Z")]}
+			/>,
+		);
+		act(() => handlers.step?.(1));
+		act(() => handlers.step?.(1));
+		const mac = isMacPlatform();
+		const modifierName = mac ? "Alt" : "Control";
+		const held = (key: string, code: string, type: "keydown" | "keyup") => {
+			const event = new KeyboardEvent(type, {
+				key,
+				code,
+				altKey: false,
+				ctrlKey: false,
+				bubbles: true,
+				cancelable: true,
+			});
+			Object.defineProperty(event, "getModifierState", { value: (name: string) => name === modifierName });
+			window.dispatchEvent(event);
+		};
+		act(() => {
+			held("Tab", "Tab", "keyup");
+			held("Shift", "ShiftLeft", "keyup");
+		});
+		expect(onCommit).not.toHaveBeenCalled();
+		expect(screen.getByTestId("session-switcher")).toBeInTheDocument();
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent("keyup", {
+				key: modifierName,
+				code: mac ? "AltLeft" : "ControlLeft",
+				altKey: mac,
+				ctrlKey: !mac,
+				bubbles: true,
+			}));
+		});
+		expect(onCommit).toHaveBeenCalledTimes(1);
+		expect(onCommit).toHaveBeenCalledWith("B");
+		act(() => {
+			window.dispatchEvent(new KeyboardEvent("keyup", { key: "Tab", code: "Tab", bubbles: true }));
+		});
+		expect(onCommit).toHaveBeenCalledTimes(1);
 	});
 
 	it("commits when Option comes up, including the macOS keydown that reports alt already released", () => {

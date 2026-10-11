@@ -181,9 +181,11 @@ export function defaultShortcutBindings(id: AppShortcutId, isMac: boolean): read
 		case "next-session":
 			return [isMac ? binding("ArrowDown", { meta: true, alt: true }) : binding("PageDown", { ctrl: true })];
 		case "previous-tab":
-			return [binding("Tab", { ctrl: true, shift: true })];
+			// Windows/Linux Ctrl+Tab belongs to the session switcher, so terminal
+			// tabs use Ctrl+Shift+PageUp there. macOS keeps Ctrl+Tab.
+			return [isMac ? binding("Tab", { ctrl: true, shift: true }) : binding("PageUp", { ctrl: true, shift: true })];
 		case "next-tab":
-			return [binding("Tab", { ctrl: true })];
+			return [isMac ? binding("Tab", { ctrl: true }) : binding("PageDown", { ctrl: true, shift: true })];
 		case "switch-session":
 			// macOS Option+Tab. Windows/Linux Ctrl+Tab. Shift reverses.
 			// Both directions are listed so the shortcut help matches the switcher.
@@ -209,6 +211,23 @@ function normalizedKey(key: string): string {
 	if (key === "Up") return "arrowup";
 	if (key === "Down") return "arrowdown";
 	return key.toLowerCase();
+}
+
+/** Fixed chords win over an earlier customizable row that lists the same keys. */
+export function findConflictingShortcut(
+	chord: ShortcutChord,
+	isMac: boolean,
+	overrides: KeybindingOverrides,
+	exceptId?: AppShortcutId,
+): (typeof APP_SHORTCUTS)[number] | undefined {
+	const matches = APP_SHORTCUTS.filter(
+		(shortcut) =>
+			shortcut.id !== exceptId &&
+			effectiveShortcutBindings(shortcut.id, isMac, overrides).some((existing) =>
+				matchesShortcutBinding(chord, existing),
+			),
+	);
+	return matches.find((shortcut) => shortcut.customizable === false) ?? matches[0];
 }
 
 export function matchesShortcutBinding(chord: ShortcutChord, candidate: ShortcutBinding): boolean {
@@ -387,25 +406,28 @@ export type SessionSwitcherModifierInput = {
 };
 
 /**
- * True when this event means the held switcher modifier came up.
- * macOS often does not emit keyUp for Option. Electron reports the
- * flags-changed release as keyDown, key "Alt", with alt already false.
- * Releasing Tab after Option is a keyUp whose alt flag is already false.
+ * True only when the switcher modifier key itself came up.
+ * macOS often skips keyUp for Option. Electron then reports the flags-changed
+ * release as keyDown, key "Alt", code "AltLeft" or "AltRight", with alt already
+ * false. The keyUp for Option can also arrive with alt still true, so a keyUp
+ * of the modifier counts even when the flag lags.
+ * Tab keyup is not a release. While Option or Ctrl is held, Electron often
+ * reports that keyup with the modifier flag already false, which used to commit
+ * the highlighted row (often the current session) before the next Tab press.
  */
 export function isSessionSwitcherModifierRelease(input: SessionSwitcherModifierInput, isMac: boolean): boolean {
 	if (input.type === "char") return false;
 	const key = normalizedKey(input.key);
 	const code = normalizedKey(input.code ?? "");
 	if (isMac) {
-		const altKey = key === "alt" || key === "option" || code === "altleft" || code === "altright";
-		if (altKey && !input.alt) return true;
-		if (input.type === "keyUp" && !input.alt) return true;
-		return false;
+		const altKey = key === "alt" || key === "option" || key === "altgraph"
+			|| code === "altleft" || code === "altright";
+		if (!altKey) return false;
+		return input.type === "keyUp" || !input.alt;
 	}
 	const controlKey = key === "control" || key === "ctrl" || code === "controlleft" || code === "controlright";
-	if (controlKey && !input.ctrl) return true;
-	if (input.type === "keyUp" && !input.ctrl) return true;
-	return false;
+	if (!controlKey) return false;
+	return input.type === "keyUp" || !input.ctrl;
 }
 
 export function matchesFocusTerminalShortcut(chord: ShortcutChord, isMac: boolean): boolean {
