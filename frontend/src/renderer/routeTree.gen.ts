@@ -19,6 +19,7 @@ import { Route as ShellSessionsIndexRouteImport } from './routes/_shell.sessions
 import { Route as ShellSessionsSessionIdRouteImport } from './routes/_shell.sessions.$sessionId'
 import { Route as ShellProjectsProjectIdRouteImport } from './routes/_shell.projects.$projectId'
 import { Route as ShellProjectsProjectIdSettingsRouteImport } from './routes/_shell.projects.$projectId_.settings'
+import { Route as ShellProjectsProjectIdGridRouteImport } from './routes/_shell.projects.$projectId_.grid'
 import { Route as ShellProjectsProjectIdSessionsSessionIdRouteImport } from './routes/_shell.projects.$projectId_.sessions.$sessionId'
 import { Route as ShellHostHostIdSessionSessionIdRouteImport } from './routes/_shell.host.$hostId.session.$sessionId'
 import { Route as ShellHostHostIdProjectProjectIdRouteImport } from './routes/_shell.host.$hostId.project.$projectId'
@@ -74,6 +75,12 @@ const ShellProjectsProjectIdSettingsRoute =
     path: '/projects/$projectId/settings',
     getParentRoute: () => ShellRoute,
   } as any)
+const ShellProjectsProjectIdGridRoute =
+  ShellProjectsProjectIdGridRouteImport.update({
+    id: '/projects/$projectId_/grid',
+    path: '/projects/$projectId/grid',
+    getParentRoute: () => ShellRoute,
+  } as any)
 const ShellProjectsProjectIdSessionsSessionIdRoute =
   ShellProjectsProjectIdSessionsSessionIdRouteImport.update({
     id: '/projects/$projectId_/sessions/$sessionId',
@@ -108,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/projects/$projectId': typeof ShellProjectsProjectIdRoute
   '/sessions/$sessionId': typeof ShellSessionsSessionIdRoute
   '/sessions/': typeof ShellSessionsIndexRoute
+  '/projects/$projectId/grid': typeof ShellProjectsProjectIdGridRoute
   '/projects/$projectId/settings': typeof ShellProjectsProjectIdSettingsRoute
   '/host/$hostId/project/$projectId': typeof ShellHostHostIdProjectProjectIdRoute
   '/host/$hostId/session/$sessionId': typeof ShellHostHostIdSessionSessionIdRoute
@@ -122,6 +130,7 @@ export interface FileRoutesByTo {
   '/projects/$projectId': typeof ShellProjectsProjectIdRoute
   '/sessions/$sessionId': typeof ShellSessionsSessionIdRoute
   '/sessions': typeof ShellSessionsIndexRoute
+  '/projects/$projectId/grid': typeof ShellProjectsProjectIdGridRoute
   '/projects/$projectId/settings': typeof ShellProjectsProjectIdSettingsRoute
   '/host/$hostId/project/$projectId': typeof ShellHostHostIdProjectProjectIdRoute
   '/host/$hostId/session/$sessionId': typeof ShellHostHostIdSessionSessionIdRoute
@@ -139,6 +148,7 @@ export interface FileRoutesById {
   '/_shell/projects/$projectId': typeof ShellProjectsProjectIdRoute
   '/_shell/sessions/$sessionId': typeof ShellSessionsSessionIdRoute
   '/_shell/sessions/': typeof ShellSessionsIndexRoute
+  '/_shell/projects/$projectId_/grid': typeof ShellProjectsProjectIdGridRoute
   '/_shell/projects/$projectId_/settings': typeof ShellProjectsProjectIdSettingsRoute
   '/_shell/host/$hostId/project/$projectId': typeof ShellHostHostIdProjectProjectIdRoute
   '/_shell/host/$hostId/session/$sessionId': typeof ShellHostHostIdSessionSessionIdRoute
@@ -156,6 +166,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/sessions/$sessionId'
     | '/sessions/'
+    | '/projects/$projectId/grid'
     | '/projects/$projectId/settings'
     | '/host/$hostId/project/$projectId'
     | '/host/$hostId/session/$sessionId'
@@ -170,6 +181,7 @@ export interface FileRouteTypes {
     | '/projects/$projectId'
     | '/sessions/$sessionId'
     | '/sessions'
+    | '/projects/$projectId/grid'
     | '/projects/$projectId/settings'
     | '/host/$hostId/project/$projectId'
     | '/host/$hostId/session/$sessionId'
@@ -186,6 +198,7 @@ export interface FileRouteTypes {
     | '/_shell/projects/$projectId'
     | '/_shell/sessions/$sessionId'
     | '/_shell/sessions/'
+    | '/_shell/projects/$projectId_/grid'
     | '/_shell/projects/$projectId_/settings'
     | '/_shell/host/$hostId/project/$projectId'
     | '/_shell/host/$hostId/session/$sessionId'
@@ -269,6 +282,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ShellProjectsProjectIdSettingsRouteImport
       parentRoute: typeof ShellRoute
     }
+    '/_shell/projects/$projectId_/grid': {
+      id: '/_shell/projects/$projectId_/grid'
+      path: '/projects/$projectId/grid'
+      fullPath: '/projects/$projectId/grid'
+      preLoaderRoute: typeof ShellProjectsProjectIdGridRouteImport
+      parentRoute: typeof ShellRoute
+    }
     '/_shell/projects/$projectId_/sessions/$sessionId': {
       id: '/_shell/projects/$projectId_/sessions/$sessionId'
       path: '/projects/$projectId/sessions/$sessionId'
@@ -321,6 +341,7 @@ interface ShellRouteChildren {
   ShellTerminalsRoute: typeof ShellTerminalsRoute
   ShellIndexRoute: typeof ShellIndexRoute
   ShellProjectsProjectIdRoute: typeof ShellProjectsProjectIdRoute
+  ShellProjectsProjectIdGridRoute: typeof ShellProjectsProjectIdGridRoute
   ShellProjectsProjectIdSettingsRoute: typeof ShellProjectsProjectIdSettingsRoute
   ShellHostHostIdProjectProjectIdRoute: typeof ShellHostHostIdProjectProjectIdRoute
   ShellHostHostIdSessionSessionIdRoute: typeof ShellHostHostIdSessionSessionIdRoute
@@ -335,6 +356,7 @@ const ShellRouteChildren: ShellRouteChildren = {
   ShellTerminalsRoute: ShellTerminalsRoute,
   ShellIndexRoute: ShellIndexRoute,
   ShellProjectsProjectIdRoute: ShellProjectsProjectIdRoute,
+  ShellProjectsProjectIdGridRoute: ShellProjectsProjectIdGridRoute,
   ShellProjectsProjectIdSettingsRoute: ShellProjectsProjectIdSettingsRoute,
   ShellHostHostIdProjectProjectIdRoute: ShellHostHostIdProjectProjectIdRoute,
   ShellHostHostIdSessionSessionIdRoute: ShellHostHostIdSessionSessionIdRoute,

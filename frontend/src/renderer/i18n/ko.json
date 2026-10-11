@@ -2677,5 +2677,21 @@
 	"cues.cancelSetup": "Cancel setup",
 	"cues.dismissStartupError": "Dismiss startup cue error",
 	"cues.commandAndOutput": "Command and output: {{name}}",
-	"cues.noCommandOutput": "No command output."
+	"cues.noCommandOutput": "No command output.",
+	"grid.open": "그리드 열기",
+	"grid.title": "Live Grid",
+	"grid.completed": "Show completed",
+	"grid.reset": "Reset panel sizes",
+	"grid.connectionError": "Connection interrupted. Sessions remain attached while AO reconnects.",
+	"grid.retry": "Retry connection",
+	"grid.orchestratorUnavailable": "The project orchestrator is unavailable. Refresh to reconnect to its existing session.",
+	"grid.resizeColumns": "Resize columns",
+	"grid.resizeRows": "Resize rows",
+	"grid.move": "Drag worker panel",
+	"grid.movePrevious": "Move worker earlier",
+	"grid.moveNext": "Move worker later",
+	"grid.maximize": "Maximize panel",
+	"grid.restoreSize": "Restore grid",
+	"grid.restore": "Restore session",
+	"grid.done": "Completed"
 }

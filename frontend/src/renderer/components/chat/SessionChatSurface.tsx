@@ -1,3 +1,4 @@
+import { useSessionViewport } from "../../lib/session-viewport";
 /**
  * The central surface for a chat-mode session.
  *
@@ -190,6 +191,7 @@ export const SessionChatSurface = memo(function SessionChatSurface({
 	onConversationWorkChange?: (state: ConversationWorkState) => void;
 }) {
 	const uiSessionId = sessionUiKey(session.id, hostId);
+	const viewport = useSessionViewport();
 	const {
 		snapshot: queriedSnapshot,
 		isLoading,
@@ -419,7 +421,7 @@ export const SessionChatSurface = memo(function SessionChatSurface({
 			else if (pendingCompleted.get(item.id) !== item.revision) pendingCompleted.delete(item.id);
 		}
 		conversationLinkBaselines.current.set(uiSessionId, { latestSequence, messages, pendingCompleted });
-		if (autoOpenedLinkSessions.has(uiSessionId)) return;
+		if (autoOpenedLinkSessions.has(uiSessionId) || !viewport.visible || viewport.embedded) return;
 		// Do not surprise users by opening links from history when a session is first
 		// mounted. The exception is the current turn: a fast agent can finish before
 		// the first conversation request resolves, so its response is already present
@@ -439,7 +441,7 @@ export const SessionChatSurface = memo(function SessionChatSurface({
 				break;
 			}
 		}
-	}, [isLoading, openLinkInBrowser, paths, snapshot, uiSessionId]);
+	}, [isLoading, openLinkInBrowser, paths, snapshot, uiSessionId, viewport.embedded, viewport.visible]);
 	const observedSuccessfulSwitch = Boolean(
 		agentSwitch &&
 			observedSettledSwitchId === agentSwitch.id &&

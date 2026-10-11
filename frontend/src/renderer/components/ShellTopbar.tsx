@@ -1,3 +1,4 @@
+import { OpenGridButton } from "./OpenGridButton";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate, useParams } from "@tanstack/react-router";
@@ -230,6 +231,7 @@ export function ShellTopbar({
 				data-testid="workspace-topbar-actions"
 			>
 				{isProjectBoardRoute || isOrchestrator ? <ProjectTerminationFeedback projectId={projectId} hostId={hostId} /> : null}
+				{!isOrchestrator && projectId && !hostId && supportsProjectActions && project?.kind !== CLOUD_PROJECT_KIND ? <OpenGridButton projectId={projectId} /> : null}
 				{!boardActionsInPanel && isProjectBoardRoute ? (
 					<ProjectBoardActions actions={projectActions} placement="header" quiet={showProjectEmpty} cloud={project?.kind === CLOUD_PROJECT_KIND} style={noDragStyle} />
 				) : null}
@@ -277,6 +279,7 @@ export function ShellTopbar({
 									</TooltipTrigger>
 									<TooltipContent side="bottom">{t("shell.openKanban")}</TooltipContent>
 								</Tooltip>
+								{projectId && !hostId && project?.kind !== CLOUD_PROJECT_KIND ? <OpenGridButton projectId={projectId} /> : null}
 							</>
 						) : null}
 						{/* Open-in-editor leads the session actions: it is the only
