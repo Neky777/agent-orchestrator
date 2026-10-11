@@ -156,8 +156,8 @@ export function attachAppShortcuts(
 		if (isRecording()) return;
 		const switcherDirection = sessionSwitcherDirection(chord, isMac);
 		if (switcherDirection) {
-			// Own Ctrl+Tab before next-tab. The session switcher is the owner on
-			// every platform. Option+Tab is not delivered on macOS.
+			// Ctrl+Tab stays the in-session tab shortcut. The switcher is
+			// Control+Option+Tab on macOS and Ctrl+` on Windows and Linux.
 			// Repeats advance. The first keydown only opens (the renderer decides).
 			event.preventDefault();
 			if (sessionSwitcherSuppressed) return;

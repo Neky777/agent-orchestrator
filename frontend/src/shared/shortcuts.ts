@@ -181,15 +181,17 @@ export function defaultShortcutBindings(id: AppShortcutId, isMac: boolean): read
 		case "next-session":
 			return [isMac ? binding("ArrowDown", { meta: true, alt: true }) : binding("PageDown", { ctrl: true })];
 		case "previous-tab":
-			// Ctrl+Tab is the session switcher on every platform. In-session tabs
-			// use Ctrl+Shift+PageUp.
-			return [binding("PageUp", { ctrl: true, shift: true })];
+			return [binding("Tab", { ctrl: true, shift: true })];
 		case "next-tab":
-			return [binding("PageDown", { ctrl: true, shift: true })];
+			return [binding("Tab", { ctrl: true })];
 		case "switch-session":
-			// Ctrl+Tab on every platform. Shift reverses.
-			// Option+Tab does not arrive through Electron on macOS.
-			return [binding("Tab", { ctrl: true }), binding("Tab", { ctrl: true, shift: true })];
+			// macOS: Control+Option+Tab. Option+Tab never arrives, and Ctrl+Tab
+			// already cycles the in-session tabs. Windows/Linux: Ctrl+` so
+			// Ctrl+Tab stays on those tabs. Ctrl+Alt+Tab is reserved by Windows.
+			// Shift reverses on both.
+			return isMac
+				? [binding("Tab", { ctrl: true, alt: true }), binding("Tab", { ctrl: true, alt: true, shift: true })]
+				: [binding("`", { ctrl: true, code: "Backquote" }), binding("`", { ctrl: true, shift: true, code: "Backquote" })];
 		case "focus-terminal":
 			return [isMac ? binding("t", { meta: true, shift: true }) : binding("t", { ctrl: true, shift: true })];
 		case "toggle-browser-devtools":
@@ -376,18 +378,29 @@ export function matchesNextTabShortcut(chord: ShortcutChord, isMac: boolean): bo
 	return matchesAppShortcut("next-tab", chord, isMac);
 }
 
+function isSwitcherCycleKey(chord: ShortcutChord, isMac: boolean): boolean {
+	const key = normalizedKey(chord.key);
+	const code = normalizedKey(chord.code ?? "");
+	if (isMac) return key === "tab" || code === "tab";
+	return code === "backquote" || key === "`" || key === "~";
+}
+
 /**
- * Direction for one Tab press of the project session switcher.
+ * Direction for one press of the project session switcher.
  * 1 moves forward, -1 moves backward. Null when the chord belongs to something else.
- * Every platform uses Ctrl+Tab. Shift reverses. Option+Tab is not used: macOS
- * does not deliver it through Electron's before-input-event.
+ * macOS is Control+Option+Tab. Windows and Linux are Ctrl+` (Backquote).
+ * Shift reverses. Ctrl+Tab stays the in-session tab shortcut. Option+Tab is
+ * not used: macOS does not deliver it through Electron.
  * The binding is fixed: a customized next-tab chord must not move this switcher,
  * and this switcher must not follow a customized binding onto Ctrl+C or similar.
  */
 export function sessionSwitcherDirection(chord: ShortcutChord, isMac: boolean): -1 | 1 | null {
-	void isMac;
-	if (normalizedKey(chord.key) !== "tab") return null;
-	if (chord.meta || chord.alt || !chord.ctrl) return null;
+	if (chord.meta || !chord.ctrl || !isSwitcherCycleKey(chord, isMac)) return null;
+	if (isMac) {
+		if (!chord.alt) return null;
+	} else if (chord.alt) {
+		return null;
+	}
 	return chord.shift ? -1 : 1;
 }
 

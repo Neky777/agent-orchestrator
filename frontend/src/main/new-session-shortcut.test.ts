@@ -211,21 +211,23 @@ describe("attachAppShortcuts", () => {
 		expect(event.preventDefault).toHaveBeenCalledTimes(1);
 	});
 
-	it("gives macOS Ctrl+Tab to the session switcher and ignores Option+Tab", () => {
+	it("keeps macOS Ctrl+Tab as next tab and uses Control+Option+Tab for the switcher", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
 		attachAppShortcuts(source, true, target);
 
 		const optionTab = source.emit({ key: "Tab", alt: true });
-		const open = source.emit({ key: "Tab", control: true });
-		const again = source.emit({ key: "Tab", control: true, isAutoRepeat: true });
+		const nextTab = source.emit({ key: "Tab", control: true });
+		const open = source.emit({ key: "Tab", control: true, alt: true });
+		const again = source.emit({ key: "Tab", control: true, alt: true, isAutoRepeat: true });
 		const release = source.emit({ key: "Control", code: "ControlLeft", control: false, type: "keyUp" });
 
 		expect(optionTab.preventDefault).not.toHaveBeenCalled();
-		expect(target.send).not.toHaveBeenCalledWith(NEXT_TAB_SHORTCUT_CHANNEL);
-		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, 1);
+		expect(target.send).toHaveBeenNthCalledWith(1, NEXT_TAB_SHORTCUT_CHANNEL);
 		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, 1);
-		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_RELEASE_CHANNEL);
+		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_STEP_CHANNEL, 1);
+		expect(target.send).toHaveBeenNthCalledWith(4, SESSION_SWITCHER_RELEASE_CHANNEL);
+		expect(nextTab.preventDefault).toHaveBeenCalledOnce();
 		expect(open.preventDefault).toHaveBeenCalledOnce();
 		expect(again.preventDefault).toHaveBeenCalledOnce();
 		expect(release.preventDefault).toHaveBeenCalledOnce();
@@ -237,9 +239,9 @@ describe("attachAppShortcuts", () => {
 		const target = fakeTarget();
 		attachAppShortcuts(source, true, target);
 
-		source.emit({ key: "Tab", control: true });
-		source.emit({ key: "Tab", control: true });
-		const tabUpWhileCtrlHeld = source.emit({ key: "Tab", control: false, type: "keyUp" });
+		source.emit({ key: "Tab", control: true, alt: true });
+		source.emit({ key: "Tab", control: true, alt: true });
+		const tabUpWhileCtrlHeld = source.emit({ key: "Tab", control: false, alt: false, type: "keyUp" });
 		const shiftUp = source.emit({ key: "Shift", code: "ShiftLeft", control: false, type: "keyUp" });
 		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
 		expect(tabUpWhileCtrlHeld.preventDefault).not.toHaveBeenCalled();
@@ -253,8 +255,8 @@ describe("attachAppShortcuts", () => {
 		expect(target.send.mock.calls.filter((call) => call[0] === SESSION_SWITCHER_RELEASE_CHANNEL)).toHaveLength(1);
 
 		target.send.mockClear();
-		source.emit({ key: "Tab", control: true, shift: true });
-		source.emit({ key: "Tab", code: "Tab", control: true, shift: true, isAutoRepeat: true });
+		source.emit({ key: "Tab", control: true, alt: true, shift: true });
+		source.emit({ key: "Tab", code: "Tab", control: true, alt: true, shift: true, isAutoRepeat: true });
 		const ctrlFirst = source.emit({ key: "Control", code: "ControlRight", control: false, type: "keyUp" });
 		const tabAfterCtrl = source.emit({ key: "Tab", control: false, type: "keyUp" });
 		expect(ctrlFirst.preventDefault).toHaveBeenCalledOnce();
@@ -265,17 +267,19 @@ describe("attachAppShortcuts", () => {
 		expect(target.send).toHaveBeenCalledTimes(3);
 	});
 
-	it("owns Ctrl+Tab on Windows and Linux, including backward, escape, and focus loss", () => {
+	it("keeps Windows Ctrl+Tab as next tab and uses Ctrl+backquote for the switcher", () => {
 		const source = fakeSource();
 		const target = fakeTarget();
 		attachAppShortcuts(source, false, target, true);
 
-		const open = source.emit({ key: "Tab", control: true });
-		const back = source.emit({ key: "Tab", control: true, shift: true, isAutoRepeat: true });
-		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, 1);
-		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, -1);
-		expect(target.send).not.toHaveBeenCalledWith(NEXT_TAB_SHORTCUT_CHANNEL);
-		expect(target.send).not.toHaveBeenCalledWith(PREVIOUS_TAB_SHORTCUT_CHANNEL);
+		const nextTab = source.emit({ key: "Tab", control: true });
+		const open = source.emit({ key: "`", code: "Backquote", control: true });
+		const back = source.emit({ key: "~", code: "Backquote", control: true, shift: true, isAutoRepeat: true });
+		expect(target.send).toHaveBeenNthCalledWith(1, NEXT_TAB_SHORTCUT_CHANNEL);
+		expect(target.send).toHaveBeenNthCalledWith(2, SESSION_SWITCHER_STEP_CHANNEL, 1);
+		expect(target.send).toHaveBeenNthCalledWith(3, SESSION_SWITCHER_STEP_CHANNEL, -1);
+		expect(nextTab.preventDefault).toHaveBeenCalledOnce();
+		target.focus.mockClear();
 		expect(open.preventDefault).toHaveBeenCalledOnce();
 		expect(back.preventDefault).toHaveBeenCalledOnce();
 		// The browser view asks the shell to take focus for other shortcuts.
@@ -289,19 +293,19 @@ describe("attachAppShortcuts", () => {
 		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
 		expect(release.preventDefault).not.toHaveBeenCalled();
 
-		source.emit({ key: "Tab", control: true });
+		source.emit({ key: "`", code: "Backquote", control: true });
 		cancelSessionSwitcherForFocusLoss();
 		source.emit({ key: "Control", type: "keyUp" });
-		expect(target.send).toHaveBeenCalledTimes(5);
-		expect(target.send).toHaveBeenNthCalledWith(5, SESSION_SWITCHER_CANCEL_CHANNEL);
+		expect(target.send).toHaveBeenCalledTimes(6);
+		expect(target.send).toHaveBeenNthCalledWith(6, SESSION_SWITCHER_CANCEL_CHANNEL);
 		expect(target.send).not.toHaveBeenCalledWith(SESSION_SWITCHER_RELEASE_CHANNEL);
 
 		target.send.mockClear();
-		const reopened = source.emit({ key: "Tab", control: true });
+		const reopened = source.emit({ key: "`", code: "Backquote", control: true });
 		source.emit({ key: "Escape" });
 		cancelSessionSwitcherForFocusLoss();
 		source.emit({ key: "Control", type: "keyUp" });
-		const again = source.emit({ key: "Tab", control: true });
+		const again = source.emit({ key: "`", code: "Backquote", control: true });
 		expect(reopened.preventDefault).toHaveBeenCalled();
 		expect(again.preventDefault).toHaveBeenCalled();
 		expect(target.send).toHaveBeenNthCalledWith(1, SESSION_SWITCHER_STEP_CHANNEL, 1);
