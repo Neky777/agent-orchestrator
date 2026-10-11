@@ -12,7 +12,7 @@ import {
 } from "react";
 import { createPortal } from "react-dom";
 import { useWorkspaceQuery } from "../../hooks/useWorkspaceQuery";
-import { SessionViewportContext, useSessionViewport } from "../../lib/session-viewport";
+import { SessionViewportContext, sessionViewportState, useSessionViewport } from "../../lib/session-viewport";
 import { SessionChatSurface } from "./SessionChatSurface";
 
 type Props = ComponentProps<typeof SessionChatSurface>;
@@ -102,7 +102,7 @@ export function SessionChatCacheProvider({ children }: { children: ReactNode }) 
 			{children}
 			{[...entries.current].map(([key, entry]) =>
 				createPortal(
-					<SessionViewportContext.Provider value={{ embedded: entry.embedded, visible: Boolean(entry.slot) }}>
+					<SessionViewportContext.Provider value={sessionViewportState(entry.embedded, Boolean(entry.slot))}>
 						<SessionChatSurface {...entry.props} />
 					</SessionViewportContext.Provider>,
 					entry.container,

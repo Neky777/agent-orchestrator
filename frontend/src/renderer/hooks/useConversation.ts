@@ -1402,7 +1402,7 @@ export function useConversationSkills(sessionId: string | undefined, enabled: bo
  * The endpoint caps itself, and `truncated` is respected rather than presented as a
  * complete list.
  */
-export function useWorkspaceFilePaths(sessionId: string | undefined, enabled: boolean, hostId?: string) {
+export function useWorkspaceFilePaths(sessionId: string | undefined, enabled: boolean, hostId?: string, watchChanges = true) {
 	const queryClient = useQueryClient();
 	const query = useQuery({
 		queryKey: hostId ? ["remote-workspace-file-paths", hostId, sessionId ?? ""] : ["workspace-file-paths", sessionId ?? ""],
@@ -1413,7 +1413,9 @@ export function useWorkspaceFilePaths(sessionId: string | undefined, enabled: bo
 		staleTime: 30 * 1000,
 		// Local file changes arrive through the workspace event subscription below.
 		// Remote sessions use their owning daemon instead of the local event stream.
-		refetchInterval: hostId ? 30 * 1000 : false,
+		// Embedded sessions share the daemon's HTTP/1 connection budget. File
+		// completion inventories can poll; conversation streaming stays on CDC.
+		refetchInterval: hostId || !watchChanges ? 30 * 1000 : false,
 		retry: false,
 		queryFn: async () => {
 			const { data, error } = await clientForSessionHost(hostId).GET("/api/v1/sessions/{sessionId}/workspace/files", {
@@ -1431,9 +1433,9 @@ export function useWorkspaceFilePaths(sessionId: string | undefined, enabled: bo
 		},
 	});
 	useEffect(() => {
-		if (!sessionId || !enabled || hostId) return;
+		if (!sessionId || !enabled || hostId || !watchChanges) return;
 		return subscribeWorkspaceFileChanges(sessionId, queryClient);
-	}, [enabled, hostId, queryClient, sessionId]);
+	}, [enabled, hostId, queryClient, sessionId, watchChanges]);
 	return {
 		paths: query.data?.paths ?? [],
 		truncated: query.data?.truncated ?? false,

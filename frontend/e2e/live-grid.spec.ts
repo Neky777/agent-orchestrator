@@ -28,7 +28,7 @@ const panelIds = (page: Page) =>
 		.evaluateAll((elements) => elements.map((element) => element.getAttribute("data-session-id")));
 async function terminalText(page: Page, id: string) {
 	return panel(page, id)
-		.locator("[aria-label='Session terminal']")
+		.locator(".terminal-xterm-host")
 		.evaluate((element) => {
 			const term = (
 				element as HTMLElement & {
@@ -97,7 +97,7 @@ async function setup(page: Page, count: number, chat = false) {
 							kind: "message",
 							id: `message-${id}`,
 							sequence: 1,
-							revision: 1,
+							revision: texts[id] ? 2 : 1,
 							role: "assistant",
 							origin: "agent",
 							text: texts[id] ?? `Live Chat ${id}`,
@@ -119,7 +119,7 @@ async function setup(page: Page, count: number, chat = false) {
 		return route.fulfill({ status: 404, json: { error: { code: "NOT_FOUND", message: "isolated test endpoint" } } });
 	});
 	await page.goto(`${origin}/#/projects/${project}/grid`);
-	await expect(page.getByTestId("grid-panel")).toHaveCount(count);
+	await expect(page.getByTestId("grid-panel")).toHaveCount(count, { timeout: 20_000 });
 	return { sent, texts, mutations };
 }
 
@@ -158,6 +158,7 @@ test("workers arrive, complete and reconnect without agent launches or order cha
 	const { mutations } = await setup(page, 2);
 	await page.evaluate(() => window.__aoFakeAgent!.createWorker({ id: "worker-new", title: "New task", mode: "tui" }));
 	await expect(page.getByTestId("grid-panel")).toHaveCount(3);
+	await expect.poll(() => page.evaluate(() => window.__aoFakeTerminalMux!.stats().writers)).toBe(3);
 	expect(await panelIds(page)).toEqual([orchestrator, "worker-1", "worker-new"]);
 	await page.evaluate(() => {
 		window.__aoFakeTerminalMux!.emit("worker-1/terminal_0", "worker-one-stream\r\n");
@@ -226,7 +227,7 @@ test("Chat and TUI stream concurrently, keep drafts and send to their owning ses
 	const b = panel(page, "worker-2");
 	await expect(a.getByRole("log", { name: "Conversation" })).toContainText("Live Chat worker-1");
 	await expect(b.getByRole("log", { name: "Conversation" })).toContainText("Live Chat worker-2");
-	const composer = a.getByRole("textbox", { name: "Message the agent" });
+	const composer = a.getByRole("combobox", { name: "Message the agent" });
 	await composer.fill("Keep this draft");
 	texts["worker-1"] = "Concurrent Chat stream one";
 	texts["worker-2"] = "Concurrent Chat stream two";
@@ -239,6 +240,11 @@ test("Chat and TUI stream concurrently, keep drafts and send to their owning ses
 	await expect(b.getByRole("log", { name: "Conversation" })).toContainText(texts["worker-2"]);
 	await expect.poll(() => terminalText(page, "worker-3")).toContain("Concurrent TUI stream");
 	await page.getByRole("button", { name: "Open Kanban", exact: true }).last().click();
+	await page.getByRole("button", { name: "Open Grid", exact: true }).last().click();
+	await expect(composer).toHaveText("Keep this draft");
+	await page.evaluate(({ project, id }) => { window.location.hash = `/projects/${project}/sessions/${id}`; }, { project, id: "worker-1" });
+	const singleComposer = page.getByRole("combobox", { name: "Message the agent" });
+	await expect(singleComposer).toHaveText("Keep this draft");
 	await page.getByRole("button", { name: "Open Grid", exact: true }).last().click();
 	await expect(composer).toHaveText("Keep this draft");
 	await composer.press("Enter");

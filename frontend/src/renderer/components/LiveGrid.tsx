@@ -15,7 +15,7 @@ import { useWorkspaceQuery } from "../hooks/useWorkspaceQuery";
 import { useConversation } from "../hooks/useConversation";
 import { useRestoreSession } from "../hooks/useRestoreSession";
 import { useShell } from "../lib/shell-context";
-import { SessionViewportContext } from "../lib/session-viewport";
+import { SessionViewportContext, sessionViewportState } from "../lib/session-viewport";
 import {
 	GRID_GAP,
 	GRID_MIN_HEIGHT,
@@ -29,7 +29,7 @@ import {
 	writeGridPreferences,
 } from "../lib/live-grid-layout";
 import { getAgentActivityView } from "../lib/session-presentation";
-import { initialTerminalFontSize } from "../lib/terminal-font-size";
+import { clampTerminalFontSize, initialTerminalFontSize, terminalFontSizeStorageKey } from "../lib/terminal-font-size";
 import { agentLabel } from "../lib/agent-options";
 import { hidesShellTopbar } from "../lib/platform";
 import { useResolvedTheme } from "../stores/ui-store";
@@ -270,13 +270,15 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 										</header>
 									)}
 									<div className="min-h-0 flex-1 overflow-hidden">
-										<SessionViewportContext.Provider value={{ embedded: true, visible }}>
+										<SessionViewportContext.Provider value={sessionViewportState(true, visible)}>
 											{session ? (
 												<GridSessionSurface
 													session={session}
 													daemonReady={daemonStatus.state === "ready"}
 													theme={theme}
 													visible={visible}
+													maximized={maximized === session.id}
+													onToggleMaximized={toggleMaximized}
 												/>
 											) : (
 												<div className="flex h-full flex-col items-center justify-center gap-3 p-4 text-center text-xs text-muted-foreground">
@@ -349,12 +351,31 @@ const GridSessionSurface = memo(function GridSessionSurface({
 	daemonReady,
 	theme,
 	visible,
+	maximized,
+	onToggleMaximized,
 }: {
 	session: WorkspaceSession;
 	daemonReady: boolean;
 	theme: "dark" | "light";
 	visible: boolean;
+	maximized: boolean;
+	onToggleMaximized: (id: string) => void;
 }) {
+	const [fontSize, setFontSize] = useState(initialTerminalFontSize);
+	const updateFontSize = useCallback(
+		(delta: number) =>
+			setFontSize((current) => {
+				const next = clampTerminalFontSize(current + delta);
+				try {
+					localStorage.setItem(terminalFontSizeStorageKey, String(next));
+				} catch {
+					/* Keep zoom usable without storage. */
+				}
+				return next;
+			}),
+		[],
+	);
+	const toggleFullscreen = useCallback(() => onToggleMaximized(session.id), [onToggleMaximized, session.id]);
 	return session.mode === "chat" ? (
 		<RetainedSessionChatSurface session={session} daemonReady={daemonReady} theme={theme} />
 	) : (
@@ -362,7 +383,10 @@ const GridSessionSurface = memo(function GridSessionSurface({
 			session={session}
 			theme={theme}
 			daemonReady={daemonReady}
-			fontSize={initialTerminalFontSize()}
+			fontSize={fontSize}
+			onChangeFontSize={updateFontSize}
+			onToggleFullscreen={toggleFullscreen}
+			isFullscreen={maximized}
 			focusRequested={false}
 			isVisible={visible}
 		/>

@@ -49,7 +49,7 @@ describe("Live Grid session selection", () => {
 	});
 	it("retains a disconnected worker and a terminated orchestrator without creating sessions", () => {
 		const orchestrator = session("orchestrator", { kind: "orchestrator", isTerminated: true });
-		const worker = session("worker", { status: "no_signal", activity: { state: "unknown" } });
+		const worker = session("worker", { status: "no_signal", activity: { state: "unknown", lastActivityAt: "2026-10-11T00:00:00Z" } });
 		const selection = gridSessions([worker, orchestrator], readGridPreferences("test"));
 		expect(selection.orchestrator).toBe(orchestrator);
 		expect(selection.visible).toEqual([worker]);
