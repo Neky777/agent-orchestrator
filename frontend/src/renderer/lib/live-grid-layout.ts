@@ -110,13 +110,14 @@ export function resizeGridTracks(tracks: number[], index: number, delta: number,
 	return next;
 }
 
-export function gridStorageKey(projectId: string) {
-	return `ao.live-grid.v1.${encodeURIComponent(projectId)}`;
+export function gridStorageKey(projectId: string, hostId?: string) {
+	return hostId ? `ao.live-grid.v1.remote.${encodeURIComponent(hostId)}.${encodeURIComponent(projectId)}`
+		: `ao.live-grid.v1.${encodeURIComponent(projectId)}`;
 }
-export function readGridPreferences(projectId: string): GridPreferences {
+export function readGridPreferences(projectId: string, hostId?: string): GridPreferences {
 	const empty: GridPreferences = { version: 1, order: [], showCompleted: false, splits: {} };
 	try {
-		const value = JSON.parse(localStorage.getItem(gridStorageKey(projectId)) ?? "null");
+		const value = JSON.parse(localStorage.getItem(gridStorageKey(projectId, hostId)) ?? "null");
 		if (!value || value.version !== 1) return empty;
 		const splits: GridPreferences["splits"] = {};
 		for (const [key, split] of Object.entries(value.splits ?? {}) as Array<
@@ -143,9 +144,9 @@ export function readGridPreferences(projectId: string): GridPreferences {
 	}
 }
 
-export function writeGridPreferences(projectId: string, preferences: GridPreferences) {
+export function writeGridPreferences(projectId: string, preferences: GridPreferences, hostId?: string) {
 	try {
-		localStorage.setItem(gridStorageKey(projectId), JSON.stringify(preferences));
+		localStorage.setItem(gridStorageKey(projectId, hostId), JSON.stringify(preferences));
 	} catch {
 		/* The current layout still works if storage is unavailable. */
 	}

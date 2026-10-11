@@ -33,3 +33,13 @@ it("rejects aliases and state subdirectories that escape through symlinks", () =
 		rmSync(home, { recursive: true, force: true });
 	}
 });
+
+it.each(["remotes.json", "cloud-auth.bin", "app-state.json", "daemon.log", "update-settings.json"])("rejects a test profile credential/state alias: %s", (name) => {
+	const home = mkdtempSync(path.join(os.tmpdir(), "ao-grid-profile-guard-"));
+	try {
+		const root = path.join(home, "test-profile");
+		mkdirSync(root);
+		symlinkSync(path.join(home, ".ao", name), path.join(root, name), "file");
+		expect(() => isolatedLiveGridRoot(root, home)).toThrow("inside its isolated directory");
+	} finally { rmSync(home, { recursive: true, force: true }); }
+});

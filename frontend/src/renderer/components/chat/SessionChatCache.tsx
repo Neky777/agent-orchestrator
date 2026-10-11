@@ -11,7 +11,8 @@ import {
 	type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
-import { useWorkspaceQuery } from "../../hooks/useWorkspaceQuery";
+import { useWorkspaceQuery, useRemoteWorkspaceSnapshots } from "../../hooks/useWorkspaceQuery";
+import { refKey } from "../../lib/hosts";
 import { SessionViewportContext, sessionViewportState, useSessionViewport } from "../../lib/session-viewport";
 import { SessionChatSurface } from "./SessionChatSurface";
 
@@ -29,6 +30,7 @@ export function SessionChatCacheProvider({ children }: { children: ReactNode }) 
 	const parking = useRef<HTMLDivElement>(null);
 	const [, revise] = useState(0);
 	const workspaces = useWorkspaceQuery();
+	const remoteWorkspaces = useRemoteWorkspaceSnapshots();
 	const show = useCallback<Cache["show"]>((key, slot, props, embedded) => {
 		let entry = entries.current.get(key);
 		if (!entry) {
@@ -66,7 +68,6 @@ export function SessionChatCacheProvider({ children }: { children: ReactNode }) 
 		revise((value) => value + 1);
 	}, []);
 	useEffect(() => {
-		if (!workspaces.isSuccess) return;
 		const sessions = new Map(
 			(workspaces.data ?? []).flatMap((workspace) =>
 				workspace.sessions.map((session) => [session.id, session] as const),
@@ -74,9 +75,11 @@ export function SessionChatCacheProvider({ children }: { children: ReactNode }) 
 		);
 		let changed = false;
 		for (const [key, entry] of entries.current) {
-			// Remote sessions are owned by their host, not the local snapshot.
-			if (entry.props.hostId) continue;
-			const session = sessions.get(entry.props.session.id);
+			const remote = entry.props.hostId ? remoteWorkspaces.find((query) => query.hostId === entry.props.hostId) : undefined;
+			if (entry.props.hostId ? !remote?.isSuccess : !workspaces.isSuccess) continue;
+			const session = entry.props.hostId
+				? remote?.data?.flatMap((workspace) => workspace.sessions).find((session) => session.id === entry.props.session.id)
+				: sessions.get(entry.props.session.id);
 			if (!session || session.mode === "tui") {
 				entry.container.remove();
 				entries.current.delete(key);
@@ -87,7 +90,7 @@ export function SessionChatCacheProvider({ children }: { children: ReactNode }) 
 			}
 		}
 		if (changed) revise((value) => value + 1);
-	}, [workspaces.data, workspaces.isSuccess]);
+	}, [workspaces.data, workspaces.isSuccess, remoteWorkspaces]);
 	useEffect(
 		() => () => {
 			for (const entry of entries.current.values()) entry.container.remove();
@@ -117,7 +120,7 @@ export function RetainedSessionChatSurface(props: Props) {
 	const cache = useContext(Context);
 	const { embedded, visible } = useSessionViewport();
 	const slot = useRef<HTMLDivElement>(null);
-	const key = `${props.hostId ?? "local"}:${props.session.id}`;
+	const key = refKey({ host: props.hostId ?? "local", id: props.session.id });
 	useLayoutEffect(() => {
 		if (!cache || !slot.current || !visible) return;
 		const element = slot.current;

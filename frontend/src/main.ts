@@ -211,14 +211,18 @@ process.stderr.on("error", ignoreStdStreamError);
 // The optional lab build has its own identity and state, including on a Finder
 // launch. It cannot attach to the installed app's daemon or Chromium profile.
 const liveGridLab = import.meta.env.AO_BUILD_VARIANT === "live-grid-lab";
-const liveGridLabRoot = liveGridLab
-	? isolatedLiveGridRoot(process.env.AO_LIVE_GRID_LAB_ROOT ?? path.join(os.homedir(), ".ao", "live-grid-lab"), os.homedir())
+// Exercise the exact production bundle against disposable state before install.
+// Ordinary Finder launches retain the installed app identity and existing data.
+const desktopTestRoot = process.env.AO_DESKTOP_TEST_ROOT?.trim();
+const isolatedDesktop = liveGridLab || Boolean(desktopTestRoot);
+const liveGridLabRoot = isolatedDesktop
+	? isolatedLiveGridRoot(desktopTestRoot ?? process.env.AO_LIVE_GRID_LAB_ROOT ?? path.join(os.homedir(), ".ao", "live-grid-lab"), os.homedir())
 	: "";
 const liveGridLabSocket = `ao-live-grid-lab-${createHash("sha256").update(liveGridLabRoot).digest("hex").slice(0, 12)}`;
-if (liveGridLab) {
+if (isolatedDesktop) {
 	process.env.AO_DATA_DIR = path.join(liveGridLabRoot, "data");
 	process.env.AO_RUN_FILE = path.join(liveGridLabRoot, "running.json");
-	process.env.AO_PORT = process.env.AO_LIVE_GRID_LAB_PORT ?? "32191";
+	process.env.AO_PORT = process.env.AO_DESKTOP_TEST_PORT ?? process.env.AO_LIVE_GRID_LAB_PORT ?? "32191";
 	process.env.AO_TMUX_SOCKET_NAME = liveGridLabSocket;
 }
 app.setName(liveGridLab ? "Agent Orchestrator Live Grid" : app.isPackaged ? "Agent Orchestrator" : "Agent Orchestrator (dev)");
@@ -261,7 +265,7 @@ if (disableGpu === "1" || disableGpu === "true" || disableGpu === "yes" || disab
 // are deliberately NOT overridable — their profile is part of the install.
 app.setPath(
 	"userData",
-	liveGridLab ? path.join(liveGridLabRoot, "electron") : app.isPackaged
+	isolatedDesktop ? path.join(liveGridLabRoot, "electron") : app.isPackaged
 		? path.join(os.homedir(), ".ao", "electron")
 		: (process.env.AO_DEV_ELECTRON_DIR ?? path.join(os.homedir(), ".ao", "dev", "electron")),
 );
@@ -466,7 +470,7 @@ protocol.registerSchemesAsPrivileged([
 
 // Register ao-app:// as the deep-link protocol for WorkOS auth callbacks.
 // Must run before app.whenReady().
-if (!liveGridLab) registerCloudProtocol();
+if (!isolatedDesktop) registerCloudProtocol();
 if (!app.requestSingleInstanceLock()) {
 	app.exit(0);
 }
@@ -641,7 +645,7 @@ async function createWindowInternal(): Promise<void> {
 		// Agent Browser creates Unix sockets below each run root. Keep this base
 		// deliberately short so the namespace/session suffix stays below macOS's
 		// 103-byte sockaddr_un limit; all AO state remains under ~/.ao.
-		dataDir: liveGridLab ? path.join(liveGridLabRoot, "br") : path.join(os.homedir(), ".ao", ...(app.isPackaged ? ["br"] : ["dev", "br"])),
+		dataDir: isolatedDesktop ? path.join(liveGridLabRoot, "br") : path.join(os.homedir(), ".ao", ...(app.isPackaged ? ["br"] : ["dev", "br"])),
 		log: (message) => console.log(`AO: ${message}`),
 	});
 	await agentBrowserRuntime.prepare();
@@ -1109,14 +1113,14 @@ const configuredLoginShell = process.platform === "darwin" ? (os.userInfo().shel
 function telemetryOverrides(): Record<string, string> {
 	return {
 		AO_TELEMETRY_EVENTS: process.env.AO_TELEMETRY_EVENTS ?? "on",
-		AO_TELEMETRY_REMOTE: process.env.AO_TELEMETRY_REMOTE ?? (isDev || liveGridLab ? "off" : "posthog"),
+		AO_TELEMETRY_REMOTE: process.env.AO_TELEMETRY_REMOTE ?? (isDev || isolatedDesktop ? "off" : "posthog"),
 		AO_TELEMETRY_POSTHOG_KEY: process.env.AO_TELEMETRY_POSTHOG_KEY ?? DEFAULT_POSTHOG_PROJECT_KEY,
 		AO_TELEMETRY_POSTHOG_HOST: process.env.AO_TELEMETRY_POSTHOG_HOST ?? DEFAULT_POSTHOG_HOST,
 		// Daemon-side Sentry (5xx + panics with Go stacks). Stamped on the daemon
 		// env so the spawned daemon inherits the DSN; off in dev to match the
 		// PostHog remote gate, and an explicit env always wins. A blank value
 		// leaves the daemon's Sentry a no-op.
-		AO_SENTRY_DSN: process.env.AO_SENTRY_DSN ?? (isDev || liveGridLab ? "" : DEFAULT_SENTRY_DSN),
+		AO_SENTRY_DSN: process.env.AO_SENTRY_DSN ?? (isDev || isolatedDesktop ? "" : DEFAULT_SENTRY_DSN),
 		// The daemon binary has no version of its own that release tooling sets,
 		// so without this every daemon event lands unattributable to a release.
 		AO_TELEMETRY_APP_VERSION: process.env.AO_TELEMETRY_APP_VERSION ?? app.getVersion(),
@@ -1284,7 +1288,7 @@ function daemonEnv(forceKeep = keepDaemonAlive(process.env)): NodeJS.ProcessEnv 
 			(app.isPackaged
 				? path.join(process.resourcesPath, "acp-runtime")
 				: path.join(app.getAppPath(), "resources", "acp-runtime")),
-		...(bundledTmuxBinary ? { AO_TMUX_BINARY: bundledTmuxBinary, AO_TMUX_SOCKET_NAME: liveGridLab ? liveGridLabSocket : "ao" } : {}),
+		...(bundledTmuxBinary ? { AO_TMUX_BINARY: bundledTmuxBinary, AO_TMUX_SOCKET_NAME: isolatedDesktop ? liveGridLabSocket : "ao" } : {}),
 	};
 	// In dev mode, inject isolation defaults so the dev daemon never collides with
 	// the installed app. User-set env vars take priority (checked first).
@@ -1808,7 +1812,7 @@ async function startDaemonInner(startEpoch: number): Promise<DaemonStatus> {
 	let keepDaemonLogFd: number | undefined;
 	let stdio: "pipe" | "ignore" | ["pipe", number | "ignore", number | "ignore"] = "pipe";
 	if (keep) {
-		const logPath = path.join(liveGridLab ? liveGridLabRoot : path.join(os.homedir(), ".ao"), "daemon.log");
+		const logPath = path.join(isolatedDesktop ? liveGridLabRoot : path.join(os.homedir(), ".ao"), "daemon.log");
 		try {
 			keepDaemonLogFd = openSync(logPath, "a");
 			stdio = ["pipe", keepDaemonLogFd, keepDaemonLogFd];
@@ -2762,7 +2766,7 @@ ipcMain.on(TRAY_RENDERER_READY_CHANNEL, (event) => {
 // Cloud auth IPC — cloud:getSession, cloud:signIn, cloud:signOut.
 // Data dir resolves to ~/.ao (prod) or ~/.ao/dev (dev) matching daemon conventions.
 function cloudDataDir(): string {
-	if (liveGridLab) return liveGridLabRoot;
+	if (isolatedDesktop) return liveGridLabRoot;
 	return isDev
 		? path.join(os.homedir(), ".ao", DEV_STATE_SUBDIR)
 		: path.join(os.homedir(), ".ao");
@@ -2852,7 +2856,7 @@ app.on("second-instance", (_event, argv) => {
 // A live updater additionally requires a signed + notarized build — see
 // frontend/docs/desktop-release.md.
 function initAutoUpdates(): void {
-	if (liveGridLab) return;
+	if (isolatedDesktop) return;
 	if (!app.isPackaged) return;
 	const runFile = runFilePath();
 	if (!runFile) return;
@@ -2958,7 +2962,7 @@ app.whenReady().then(async () => {
 		}
 	}
 
-	if (!liveGridLab && process.platform === "darwin" && app.isPackaged) {
+	if (!isolatedDesktop && process.platform === "darwin" && app.isPackaged) {
 		const bundlePath = resolveBundlePath();
 		const action = decideRelocation({
 			inApplicationsFolder: app.isInApplicationsFolder(),
@@ -3004,7 +3008,7 @@ app.whenReady().then(async () => {
 		const { formatStaleAppCopies, retireStaleMacAppCopies } = await import("./main/stale-app-copies");
 		await retireStaleMacAppCopies({
 			platform: process.platform,
-			isPackaged: app.isPackaged && !liveGridLab,
+			isPackaged: app.isPackaged && !isolatedDesktop,
 			runningPath: resolveBundlePath(),
 			runningVersion: app.getVersion(),
 			confirm: async (copies) => {

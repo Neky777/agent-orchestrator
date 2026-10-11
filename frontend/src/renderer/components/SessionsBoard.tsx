@@ -268,7 +268,7 @@ export function SessionsBoard({ projectId, hostId }: SessionsBoardProps) {
 					{actions ? (
 						<div className="workspace-topbar-actions flex shrink-0 items-center" style={noDragStyle}>
 							{actions}
-							{projectId && !hostId && workspace?.kind !== CLOUD_PROJECT_KIND ? <OpenGridButton projectId={projectId} /> : null}
+							{projectId && workspace?.kind !== CLOUD_PROJECT_KIND ? <OpenGridButton projectId={projectId} hostId={hostId} /> : null}
 						</div>
 					) : null}
 				</div>

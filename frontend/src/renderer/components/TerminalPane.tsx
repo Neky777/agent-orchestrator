@@ -34,7 +34,9 @@ import {
 	type TerminalMuxPool,
 } from "../lib/terminal-mux";
 import { cn } from "../lib/utils";
-import { useWorkspaceQuery, workspaceQueryKeyForHost } from "../hooks/useWorkspaceQuery";
+import { useWorkspaceQuery, useRemoteWorkspaceSnapshots, workspaceQueryKeyForHost } from "../hooks/useWorkspaceQuery";
+import { baseUrlForHost } from "../lib/host-clients";
+import { sessionUiKey } from "../lib/hosts";
 import { useRestoreSession } from "../hooks/useRestoreSession";
 import { useShellTerminals } from "../hooks/useShellTerminals";
 import { useCloudCp } from "../hooks/useCloudCp";
@@ -83,6 +85,7 @@ type TerminalCacheDescriptor = {
 	kind: "shell" | "worker";
 	ownerKey: string;
 	sessionId?: string;
+	hostId?: string;
 };
 
 type CachedTerminalEntry = TerminalCacheDescriptor & {
@@ -150,7 +153,7 @@ function cacheDescriptor(
 ): TerminalCacheDescriptor | null {
 	if (terminalTarget?.kind === "shell") {
 		if (!terminalTargetBelongsToSession(terminalTarget, session?.id)) return null;
-		const ownerKey = `shell:${session?.id ?? "standalone"}:${terminalTarget.handleId}`;
+		const ownerKey = `shell:${sessionUiKey(session?.id ?? "standalone", session?.hostId)}:${terminalTarget.handleId}`;
 		return {
 			cacheKey: `${ownerKey}|handle:${terminalTarget.handleId}|generation:${terminalTarget.generation}`,
 			generation: terminalTarget.generation,
@@ -158,6 +161,7 @@ function cacheDescriptor(
 			kind: "shell",
 			ownerKey,
 			sessionId: session?.id,
+			hostId: session?.hostId,
 		};
 	}
 
@@ -166,7 +170,7 @@ function cacheDescriptor(
 	if (terminalTarget?.kind === "reviewer") return null;
 	const handleId = session?.terminalHandleId;
 	if (!session?.id || !handleId) return null;
-	const ownerKey = `session:${session.id}:worker`;
+	const ownerKey = `session:${sessionUiKey(session.id, session.hostId)}:worker`;
 	const generation = terminalGeneration ?? session.terminalGeneration ?? "";
 	// The reset nonce discriminates a restored session (same id, new worker epoch,
 	// dead old terminal) from the live one: folding it into the cache key alone
@@ -174,7 +178,7 @@ function cacheDescriptor(
 	// while `generation` stays the raw value the workspace reconcile loop compares
 	// against session.terminalGeneration — so a restore does not look like a
 	// generation change that would dispose the fresh terminal on the next render.
-	const nonce = terminalResetNonce(session.id);
+	const nonce = terminalResetNonce(sessionUiKey(session.id, session.hostId));
 	// The worker epoch is deliberately NOT in the cache key. A fresh cloud session
 	// attaches optimistically before its worker is up, when the epoch is still
 	// unknown; the moment the worker comes online the polled epoch flips from
@@ -190,6 +194,7 @@ function cacheDescriptor(
 		kind: "worker",
 		ownerKey,
 		sessionId: session.id,
+		hostId: session.hostId,
 	};
 }
 
@@ -315,6 +320,7 @@ export function TerminalCacheProvider({
 	theme: Theme;
 }) {
 	const workspaceQuery = useWorkspaceQuery();
+	const remoteWorkspaces = useRemoteWorkspaceSnapshots();
 	const shellTerminalsQuery = useShellTerminals();
 	const entriesRef = useRef(new Map<string, CachedTerminalEntry>());
 	const activeRef = useRef(new Map<string, HTMLDivElement>());
@@ -326,6 +332,7 @@ export function TerminalCacheProvider({
 		);
 	}
 	const muxPool = muxPoolRef.current;
+	const remotePools = useRef(new Map<string, { base?: string; pool: TerminalMuxPool }>());
 	// Cloud sessions do not share the pooled local-daemon socket: each runs in its
 	// own control-plane sandbox reached over its own ticketed WebSocket. Resolve a
 	// stable, per-session cloud mux factory so terminal props stay referentially
@@ -342,6 +349,21 @@ export function TerminalCacheProvider({
 	const cloudMuxFactoriesRef = useRef(new Map<string, () => TerminalMux>());
 	const resolveCreateMux = useCallback(
 		(paneSession?: WorkspaceSession, terminalTarget?: TerminalTarget): (() => TerminalMux) => {
+			if (paneSession?.hostId) {
+				const hostId = paneSession.hostId;
+				const base = baseUrlForHost(hostId);
+				let remote = remotePools.current.get(hostId);
+				if (!remote || (base && remote.base !== base)) {
+					remote?.pool.dispose();
+					remote = { base, pool: createTerminalMuxPool(() => {
+						const currentBase = baseUrlForHost(hostId);
+						if (!currentBase) throw new Error(`Host ${hostId} is offline`);
+						return createTerminalMux(muxUrlFromApiBase(currentBase));
+					}) };
+					remotePools.current.set(hostId, remote);
+				}
+				return remote.pool.acquire;
+			}
 			const cloud = paneSession?.cloud;
 			if (!cloud) return muxPool.acquire;
 			const kind = cloudTerminalKind(terminalTarget);
@@ -455,7 +477,7 @@ export function TerminalCacheProvider({
 			activeRef.current.set(entry.cacheKey, slot);
 			rerender();
 		},
-		[muxPool, rerender],
+		[resolveCreateMux, rerender],
 	);
 
 	const deactivate = useCallback(
@@ -485,7 +507,7 @@ export function TerminalCacheProvider({
 			entry.props = cachedProps;
 			rerender();
 		},
-		[muxPool, rerender],
+		[resolveCreateMux, rerender],
 	);
 
 	const markFatal = useCallback(
@@ -520,25 +542,31 @@ export function TerminalCacheProvider({
 	useEffect(() => {
 		let changed = false;
 		for (const entry of entriesRef.current.values()) {
-			if (entry.props.daemonReady === daemonReady && entry.props.theme === theme) continue;
-			entry.props = { ...entry.props, daemonReady, theme };
+			const ready = entry.hostId ? Boolean(baseUrlForHost(entry.hostId)) : daemonReady;
+			const createMux = resolveCreateMux(entry.props.session, entry.props.terminalTarget);
+			if (entry.props.daemonReady === ready && entry.props.theme === theme && entry.props.createMux === createMux) continue;
+			entry.props = { ...entry.props, daemonReady: ready, theme, createMux };
 			changed = true;
 		}
 		if (changed) rerender();
-	}, [daemonReady, rerender, theme]);
+	}, [daemonReady, rerender, theme, remoteWorkspaces, resolveCreateMux]);
 
 	// Project/session teardown is an ownership boundary, not an LRU event.
 	// Dispose retained terminal clients as soon as the authoritative workspace
 	// snapshot no longer contains their logical session.
 	useEffect(() => {
-		if (!workspaceQuery.isSuccess) return;
-		const sessions = new Map(
+		const localSessions = new Map(
 			(workspaceQuery.data ?? []).flatMap((workspace) =>
 				workspace.sessions.map((session) => [session.id, session] as const),
 			),
 		);
 		for (const entry of entriesRef.current.values()) {
-			const session = entry.sessionId ? sessions.get(entry.sessionId) : undefined;
+			const remote = entry.hostId ? remoteWorkspaces.find((query) => query.hostId === entry.hostId) : undefined;
+			// A disconnected host or failed snapshot is never proof of deletion.
+			if (entry.hostId ? !remote?.isSuccess : !workspaceQuery.isSuccess) continue;
+			const session = entry.sessionId ? entry.hostId
+				? remote?.data?.flatMap((workspace) => workspace.sessions).find((session) => session.id === entry.sessionId)
+				: localSessions.get(entry.sessionId) : undefined;
 			if (entry.sessionId && !session) {
 				removeEntry(entry.cacheKey);
 				continue;
@@ -566,7 +594,7 @@ export function TerminalCacheProvider({
 					// Update the entry's recorded epoch first so this does not fire
 					// again on the next reconcile before the rebuild lands.
 					entry.generation = sessionGen;
-					useTerminalResetStore.getState().advanceEpoch(entry.sessionId ?? session.id);
+					useTerminalResetStore.getState().advanceEpoch(sessionUiKey(entry.sessionId ?? session.id, entry.hostId));
 					continue;
 				}
 				if (entryGen === "" && sessionGen !== "") {
@@ -582,7 +610,7 @@ export function TerminalCacheProvider({
 				rerender();
 			}
 		}
-	}, [removeEntry, workspaceQuery.data, workspaceQuery.isSuccess]);
+	}, [removeEntry, workspaceQuery.data, workspaceQuery.isSuccess, remoteWorkspaces]);
 
 	// Shell handles have their own lifecycle outside WorkspaceSession. Closing a
 	// shell must close its retained mux writer even if it was parked.
@@ -592,7 +620,7 @@ export function TerminalCacheProvider({
 			(shellTerminalsQuery.data ?? []).map((terminal) => [terminal.handleId, terminal] as const),
 		);
 		for (const entry of entriesRef.current.values()) {
-			if (entry.kind !== "shell") continue;
+			if (entry.kind !== "shell" || entry.hostId) continue;
 			const shell = shells.get(entry.handleId);
 			if (
 				!shell ||
@@ -621,6 +649,8 @@ export function TerminalCacheProvider({
 			for (const entry of entriesRef.current.values()) entry.container.remove();
 			entriesRef.current.clear();
 			muxPool.dispose();
+			for (const remote of remotePools.current.values()) remote.pool.dispose();
+			remotePools.current.clear();
 		},
 		[muxPool],
 	);
@@ -734,13 +764,20 @@ export function TerminalPane({
 	const isOptimisticShell =
 		terminalTarget.kind === "shell" && terminalTarget.handleId.startsWith("pending-shell:");
 	const cache = useContext(TerminalCacheContext);
+	// Standalone consumers must never fall back to the local daemon for a
+	// remote session. The application cache supplies a shared pool when present.
+	const standaloneRemoteMux = useMemo(() => session?.hostId ? () => {
+		const base = baseUrlForHost(session.hostId!);
+		if (!base) throw new Error(`Host ${session.hostId} is offline`);
+		return createTerminalMux(muxUrlFromApiBase(base));
+	} : undefined, [session?.hostId]);
 	// Subscribe to this session's terminal-reset nonce so a restore (which bumps
 	// it) re-renders the pane and recomputes the descriptor/mux key below, forcing
 	// a fresh mount against the new worker epoch. Reading through the store hook is
 	// what makes the bump reactive; cacheDescriptor/resolveCreateMux read the same
 	// value non-reactively. Placed above the early returns so the hook order is
 	// stable regardless of the render path.
-	useTerminalResetStore((state) => (session?.id ? (state.nonces[session.id] ?? 0) : 0));
+	useTerminalResetStore((state) => (session?.id ? (state.nonces[sessionUiKey(session.id, session.hostId)] ?? 0) : 0));
 	const terminalKey =
 		terminalTarget?.kind === "reviewer" || terminalTarget?.kind === "shell"
 			? terminalTarget.handleId
@@ -839,9 +876,9 @@ export function TerminalPane({
 	// still runs in the sandbox: dial it through the control plane by its
 	// terminal ID. Without this it would reach the local daemon, which has no
 	// such terminal and reports it finished.
-	const attachedCreateMux = createMux ?? (cache && session?.cloud && terminalTarget.kind === "reviewer"
+	const attachedCreateMux = createMux ?? (cache && (session?.cloud || session?.hostId) && terminalTarget.kind === "reviewer"
 		? cache.resolveCreateMux(session, terminalTarget)
-		: undefined);
+		: standaloneRemoteMux);
 
 	return (
 		<AttachedTerminal

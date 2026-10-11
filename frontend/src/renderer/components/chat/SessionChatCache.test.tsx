@@ -5,9 +5,12 @@ import { SessionViewportContext } from "../../lib/session-viewport";
 import type { WorkspaceSession } from "../../types/workspace";
 import { RetainedSessionChatSurface, SessionChatCacheProvider } from "./SessionChatCache";
 
-const state = vi.hoisted(() => ({ mounts: 0, unmounts: 0, sessions: [] as WorkspaceSession[] }));
+const state = vi.hoisted(() => ({ mounts: 0, unmounts: 0, sessions: [] as WorkspaceSession[],
+	remote: [] as Array<{ hostId: string; isSuccess: boolean; data: Array<{ sessions: WorkspaceSession[] }> }>,
+}));
 vi.mock("../../hooks/useWorkspaceQuery", () => ({
 	useWorkspaceQuery: () => ({ isSuccess: true, data: [{ sessions: state.sessions }] }),
+	useRemoteWorkspaceSnapshots: () => state.remote,
 }));
 vi.mock("./SessionChatSurface", () => ({
 	SessionChatSurface: ({ session }: { session: WorkspaceSession }) => {
@@ -39,6 +42,7 @@ const session = (id: string): WorkspaceSession => ({
 beforeEach(() => {
 	state.mounts = 0;
 	state.unmounts = 0;
+	state.remote = [];
 	state.sessions = [session("a"), session("b")];
 });
 const tree = (ids: string[], embedded = false) => (
@@ -88,4 +92,33 @@ it("disposes UI only after an authoritative session removal or interface change"
 	view.rerender(tree([]));
 	await waitFor(() => expect(state.unmounts).toBe(1));
 	expect(document.querySelector("[data-chat-cache-key]")).toBeNull();
+});
+
+it("preserves host-qualified Chat drafts, ignores local and failed remote snapshots, and disposes only the owning host", async () => {
+	const a = { ...session("same"), hostId: "box-a", title: "A" };
+	const b = { ...session("same"), hostId: "box-b", title: "B" };
+	state.sessions = [];
+	state.remote = [a, b].map((entry) => ({ hostId: entry.hostId, isSuccess: true, data: [{ sessions: [entry] }] }));
+	const remoteTree = (visible: WorkspaceSession[]) => <SessionChatCacheProvider>
+		{visible.map((entry) => <RetainedSessionChatSurface key={entry.hostId} hostId={entry.hostId} session={entry} />)}
+	</SessionChatCacheProvider>;
+	const view = render(remoteTree([a, b]));
+	await waitFor(() => expect(state.mounts).toBe(2));
+	const inputs = screen.getAllByRole("textbox", { name: "input-same" });
+	(inputs[0] as HTMLTextAreaElement).value = "A draft";
+	(inputs[1] as HTMLTextAreaElement).value = "B draft";
+	view.rerender(remoteTree([]));
+	state.remote = [{ hostId: "box-a", isSuccess: false, data: [] }, state.remote[1]];
+	view.rerender(remoteTree([]));
+	expect(state.unmounts).toBe(0);
+	view.rerender(remoteTree([a, b]));
+	expect(screen.getAllByRole("textbox", { name: "input-same" })).toEqual(inputs);
+	expect(inputs[0]).toHaveValue("A draft"); expect(inputs[1]).toHaveValue("B draft");
+	view.rerender(remoteTree([]));
+	state.remote = [{ hostId: "box-a", isSuccess: true, data: [] }, state.remote[1]];
+	view.rerender(remoteTree([]));
+	await waitFor(() => expect(state.unmounts).toBe(1));
+	view.rerender(remoteTree([b]));
+	expect(screen.getByRole("textbox", { name: "input-same" })).toBe(inputs[1]);
+	expect(state.mounts).toBe(2);
 });

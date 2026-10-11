@@ -11,7 +11,9 @@ import {
 	type PointerEvent as ReactPointerEvent,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useWorkspaceQuery } from "../hooks/useWorkspaceQuery";
+import { useWorkspaceQuery, useRemoteProjectQuery } from "../hooks/useWorkspaceQuery";
+import { useHostConnection } from "../hooks/useHostConnection";
+import { projectNavigateTarget } from "../lib/navigate-to-session";
 import { useConversation } from "../hooks/useConversation";
 import { useRestoreSession } from "../hooks/useRestoreSession";
 import { useShell } from "../lib/shell-context";
@@ -46,15 +48,18 @@ import { RestoreUnavailableDialog } from "./RestoreUnavailableDialog";
 const EMPTY_SESSIONS: WorkspaceSession[] = [];
 type Drag = { axis: "columns" | "rows"; index: number; origin: number; tracks: number[] };
 
-export function LiveGrid({ projectId }: { projectId: string }) {
+export function LiveGrid({ projectId, hostId }: { projectId: string; hostId?: string }) {
 	const { t } = useTranslation();
 	const navigate = useNavigate();
-	const query = useWorkspaceQuery();
-	const project = query.data?.find((workspace) => workspace.id === projectId);
+	const localQuery = useWorkspaceQuery({ enabled: !hostId });
+	const remoteQuery = useRemoteProjectQuery(hostId ?? "", projectId);
+	const query = hostId ? remoteQuery : localQuery;
+	const project = hostId ? remoteQuery.data : localQuery.data?.find((workspace) => workspace.id === projectId);
+	const { baseUrl: remoteBase, label: hostLabel } = useHostConnection(hostId);
 	const sessions = project?.sessions ?? EMPTY_SESSIONS;
 	const { daemonStatus } = useShell();
 	const theme = useResolvedTheme();
-	const [preferences, setPreferences] = useState(() => readGridPreferences(projectId));
+	const [preferences, setPreferences] = useState(() => readGridPreferences(projectId, hostId));
 	const [maximized, setMaximized] = useState<string>();
 	const [draggingId, setDraggingId] = useState<string>();
 	const [bounds, setBounds] = useState({ width: GRID_MIN_WIDTH, height: GRID_MIN_HEIGHT });
@@ -97,10 +102,10 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 	const preferencesRef = useRef(preferences);
 	preferencesRef.current = preferences;
 	useEffect(() => {
-		const timer = setTimeout(() => writeGridPreferences(projectId, preferences), 150);
+		const timer = setTimeout(() => writeGridPreferences(projectId, preferences, hostId), 150);
 		return () => clearTimeout(timer);
-	}, [preferences, projectId]);
-	useEffect(() => () => writeGridPreferences(projectId, preferencesRef.current), [projectId]);
+	}, [preferences, projectId, hostId]);
+	useEffect(() => () => writeGridPreferences(projectId, preferencesRef.current, hostId), [projectId, hostId]);
 	useEffect(() => {
 		if (maximized && !panels.some((session) => session?.id === maximized)) setMaximized(undefined);
 	}, [maximized, panels]);
@@ -173,6 +178,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 			className="flex h-full min-h-0 flex-col bg-background text-foreground"
 			data-testid="live-grid"
 			data-project-id={projectId}
+			data-host-id={hostId}
 		>
 			{hidesShellTopbar() ? <ShellTopbar /> : null}
 			<div
@@ -181,6 +187,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 			>
 				<strong className="mr-auto text-sm">
 					{t("grid.title")} <span className="text-muted-foreground">· {panels.length}</span>
+					{hostId ? <span className="ml-2 text-muted-foreground">· {hostLabel ?? hostId}</span> : null}
 				</strong>
 				<label className="flex items-center gap-2 text-xs">
 					<input
@@ -192,7 +199,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 				</label>
 				<TopbarButton
 					variant="feature"
-					onClick={() => void navigate({ to: "/projects/$projectId", params: { projectId } })}
+					onClick={() => void navigate(projectNavigateTarget(projectId, hostId))}
 				>
 					<LayoutDashboard className="size-icon-md" />
 					{t("shell.openKanban")}
@@ -205,9 +212,9 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 					<RefreshCw className="size-icon-md" />
 				</TopbarButton>
 			</div>
-			{query.isError ? (
+			{query.isError || (hostId && !remoteBase) ? (
 				<p role="alert" className="px-3 py-1 text-xs text-destructive">
-					{t("grid.connectionError")}{" "}
+					{t(hostId && !remoteBase ? "remote.hostOffline" : "grid.connectionError")}{" "}
 					<button type="button" onClick={() => void query.refetch()}>
 						{t("grid.retry")}
 					</button>
@@ -258,6 +265,7 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 									{session ? (
 										<GridPanelHeader
 											session={session}
+											hostId={hostId}
 											orchestrator={index === 0}
 											maximized={maximized === session.id}
 											onToggleMaximized={toggleMaximized}
@@ -277,7 +285,9 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 											{session ? (
 												<GridSessionSurface
 													session={session}
-													daemonReady={daemonStatus.state === "ready"}
+													hostId={hostId}
+													assetBaseUrl={remoteBase}
+													daemonReady={hostId ? Boolean(remoteBase) : daemonStatus.state === "ready"}
 													theme={theme}
 													visible={visible}
 													maximized={maximized === session.id}
@@ -351,6 +361,8 @@ export function LiveGrid({ projectId }: { projectId: string }) {
 
 const GridSessionSurface = memo(function GridSessionSurface({
 	session,
+	hostId,
+	assetBaseUrl,
 	daemonReady,
 	theme,
 	visible,
@@ -358,6 +370,8 @@ const GridSessionSurface = memo(function GridSessionSurface({
 	onToggleMaximized,
 }: {
 	session: WorkspaceSession;
+	hostId?: string;
+	assetBaseUrl?: string;
 	daemonReady: boolean;
 	theme: "dark" | "light";
 	visible: boolean;
@@ -380,7 +394,7 @@ const GridSessionSurface = memo(function GridSessionSurface({
 	);
 	const toggleFullscreen = useCallback(() => onToggleMaximized(session.id), [onToggleMaximized, session.id]);
 	return session.mode === "chat" ? (
-		<RetainedSessionChatSurface session={session} daemonReady={daemonReady} theme={theme} />
+		<RetainedSessionChatSurface session={session} hostId={hostId} assetBaseUrl={assetBaseUrl} daemonReady={daemonReady} theme={theme} />
 	) : (
 		<TerminalPane
 			session={session}
@@ -398,6 +412,7 @@ const GridSessionSurface = memo(function GridSessionSurface({
 
 const GridPanelHeader = memo(function GridPanelHeader({
 	session,
+	hostId,
 	orchestrator,
 	maximized,
 	onToggleMaximized,
@@ -408,6 +423,7 @@ const GridPanelHeader = memo(function GridPanelHeader({
 	onReorder,
 }: {
 	session: WorkspaceSession;
+	hostId?: string;
 	orchestrator: boolean;
 	maximized: boolean;
 	onToggleMaximized: (id: string) => void;
@@ -419,7 +435,7 @@ const GridPanelHeader = memo(function GridPanelHeader({
 }) {
 	const { t } = useTranslation();
 	const activity = getAgentActivityView(session.activity, t);
-	const { snapshot } = useConversation(session.mode === "chat" ? session.id : undefined);
+	const { snapshot } = useConversation(session.mode === "chat" ? session.id : undefined, hostId);
 	const restore = useRestoreSession();
 	const [restoring, setRestoring] = useState(false);
 	const [restoreError, setRestoreError] = useState<string>();
@@ -492,7 +508,7 @@ const GridPanelHeader = memo(function GridPanelHeader({
 						setRestoring(true);
 						setRestoreError(undefined);
 						try {
-							const result = await restore(session.id);
+							const result = await restore(session.id, hostId);
 							if (result.status === "not_resumable") setUnavailable(true);
 							else if (result.status === "error") setRestoreError(result.message);
 						} finally {
@@ -519,6 +535,7 @@ const GridPanelHeader = memo(function GridPanelHeader({
 			<RestoreUnavailableDialog
 				open={unavailable}
 				session={session}
+				hostId={hostId}
 				onOpenChange={setUnavailable}
 				onRecreated={async () => {}}
 			/>

@@ -366,6 +366,37 @@ function selectConversationPages(data: InfiniteData<ConversationSnapshot>) {
 	return mergeConversationPages(data.pages);
 }
 
+// Multiple surfaces (Grid header, retained Chat, ordinary session) observe the
+// same conversation. Keep one fallback timer and one in-flight poll per owner.
+const remoteConversationPolls = new WeakMap<QueryClient, Map<string, { refs: number; timer: number }>>();
+function subscribeRemoteConversationPoll(queryClient: QueryClient, sessionId: string, hostId: string) {
+	let polls = remoteConversationPolls.get(queryClient);
+	if (!polls) {
+		polls = new Map();
+		remoteConversationPolls.set(queryClient, polls);
+	}
+	const key = JSON.stringify([hostId, sessionId]);
+	let poll = polls.get(key);
+	if (!poll) {
+		let running = false;
+		const timer = window.setInterval(() => {
+			if (running) return;
+			running = true;
+			void refreshRemoteConversation(queryClient, sessionId, hostId)
+				.catch(() => {})
+				.finally(() => { running = false; });
+		}, 2_000);
+		poll = { refs: 0, timer };
+		polls.set(key, poll);
+	}
+	poll.refs++;
+	return () => {
+		if (--poll.refs !== 0) return;
+		window.clearInterval(poll.timer);
+		polls.delete(key);
+	};
+}
+
 export function useConversation(sessionId: string | undefined, hostId?: string): ConversationQueryResult {
 	const queryClient = useQueryClient();
 	const refreshError = useQuery({
@@ -381,10 +412,7 @@ export function useConversation(sessionId: string | undefined, hostId?: string):
 	});
 	useEffect(() => {
 		if (!hostId || !sessionId) return;
-		const timer = window.setInterval(() => {
-			void refreshRemoteConversation(queryClient, sessionId, hostId).catch(() => {});
-		}, 2_000);
-		return () => window.clearInterval(timer);
+		return subscribeRemoteConversationPoll(queryClient, sessionId, hostId);
 	}, [hostId, queryClient, sessionId]);
 
 	if (query.error && (!hostId || !query.data)) {

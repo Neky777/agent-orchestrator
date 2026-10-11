@@ -11,8 +11,8 @@ import { _electron, expect } from "playwright/test";
 const bundle = process.env.AO_GRID_APP_PATH;
 const sessionMode = process.env.AO_GRID_SESSION_MODE ?? "mixed";
 assert.ok(["mixed", "chat", "tui"].includes(sessionMode));
-if (!bundle?.endsWith("Agent Orchestrator Live Grid.app"))
-	throw new Error("Provide AO_GRID_APP_PATH pointing to the separate Live Grid lab bundle.");
+if (!bundle || !["Agent Orchestrator.app", "Agent Orchestrator Live Grid.app"].some((name) => path.basename(bundle) === name))
+	throw new Error("Provide AO_GRID_APP_PATH pointing to the packaged AO bundle to verify with an isolated profile.");
 const root = fs.mkdtempSync(path.join(os.tmpdir(), "ao-grid-desktop-"));
 console.log(`Isolated desktop profile: ${root}`);
 const port = 32191;
@@ -39,6 +39,8 @@ const env = {
 	...process.env,
 	PATH: `${bin}:${process.env.PATH}`,
 	SHELL: shell,
+	AO_DESKTOP_TEST_ROOT: root,
+	AO_DESKTOP_TEST_PORT: String(port),
 	AO_LIVE_GRID_LAB_ROOT: root,
 	AO_LIVE_GRID_LAB_PORT: String(port),
 	AO_GRID_PROVIDER_LOG: providerLog,
@@ -92,6 +94,7 @@ app.process().stdout?.on("data", (data) => logs.push(data.toString()));
 app.process().stderr?.on("data", (data) => logs.push(data.toString()));
 const sessions = [];
 const errors = [];
+const checkpoints = [];
 const api = async (method, endpoint, body) => {
 	const response = await fetch(`http://127.0.0.1:${port}/api/v1${endpoint}`, {
 		method,
@@ -178,6 +181,7 @@ try {
 			.toBeGreaterThanOrEqual(sessionMode === "tui" ? 280 : 360);
 		await expect.poll(() => launches().length, { timeout: 30_000 }).toBe(count);
 		await page.screenshot({ path: path.join(root, "evidence", `desktop-${count}.png`) });
+		checkpoints.push({ count, metrics: await app.evaluate(({ app }) => app.getAppMetrics().map(({ pid, type, cpu, memory }) => ({ pid, type, cpu, memory }))) });
 		console.log(`Verified ${count} existing sessions in packaged Electron`);
 	}
 	const baseline = launches();
@@ -303,6 +307,7 @@ try {
 				sessions,
 				providerPids: baseline.map((entry) => entry.pid),
 				metrics,
+				checkpoints,
 				savedLayout: await page.evaluate(
 					(id) => localStorage.getItem(`ao.live-grid.v1.${encodeURIComponent(id)}`),
 					project,
