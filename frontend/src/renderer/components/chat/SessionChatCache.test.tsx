@@ -84,6 +84,24 @@ it("updates parked Chat metadata without remounting its history", async () => {
 	expect(state.mounts).toBe(1);
 });
 
+it("updates visible metadata without moving the focused composer or its selection", async () => {
+	const view = render(tree(["a"]));
+	const node = await screen.findByTestId("chat-a");
+	const input = screen.getByRole("textbox", { name: "input-a" }) as HTMLTextAreaElement;
+	input.value = "keep selected text";
+	input.focus(); input.setSelectionRange(5, 13);
+	const container = node.parentElement!;
+	const parent = container.parentElement!;
+	const append = vi.spyOn(parent, "appendChild");
+	state.sessions = [{ ...state.sessions[0], title: "Stream update" }, state.sessions[1]];
+	view.rerender(tree(["a"]));
+	await waitFor(() => expect(node).toHaveTextContent("Stream update"));
+	expect(append).not.toHaveBeenCalled();
+	expect(document.activeElement).toBe(input);
+	expect([input.selectionStart, input.selectionEnd]).toEqual([5, 13]);
+	append.mockRestore();
+});
+
 it("disposes UI only after an authoritative session removal or interface change", async () => {
 	const view = render(tree(["a"]));
 	await screen.findByTestId("chat-a");

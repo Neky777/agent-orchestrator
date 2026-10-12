@@ -52,7 +52,9 @@ export function SessionChatCacheProvider({ children }: { children: ReactNode }) 
 		entry.container.inert = false;
 		entry.container.removeAttribute("aria-hidden");
 		entry.container.style.contentVisibility = "";
-		slot.appendChild(entry.container);
+		// Re-appending an already visible node detaches it momentarily in
+		// Chromium and collapses the composer's selection during live updates.
+		if (entry.container.parentElement !== slot) slot.appendChild(entry.container);
 		revise((value) => value + 1);
 	}, []);
 	const park = useCallback<Cache["park"]>((key, slot) => {
