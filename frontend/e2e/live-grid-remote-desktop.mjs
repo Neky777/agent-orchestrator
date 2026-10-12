@@ -64,6 +64,17 @@ try {
 	await expect.poll(() => page.getByRole("log", { name: "Conversation" }).count(), { timeout: 60_000 }).toBeGreaterThan(0);
 	const ids = await panels.evaluateAll((nodes) => nodes.map((node) => node.dataset.sessionId));
 	console.log(`Real Grid visible: ${ids.length} panels, ${Object.keys(streams).length} live TUI streams`);
+	const expected = before.sessions.filter((session) => session.projectId === projectId && session.kind !== "orchestrator" && !session.isTerminated && session.status !== "merged" && session.kanbanColumn !== "archive").map((session) => session.id);
+	for (const id of expected) assert.ok(ids.includes(id), `Existing active worker must appear: ${id}`);
+	// Offscreen panes settle their first fit when brought into view. Visit every
+	// existing TUI without sending input or requesting an agent lifecycle action.
+	for (const session of before.sessions.filter((session) => session.mode === "tui" && ids.includes(session.id))) {
+		const pane = page.locator(`[data-testid="grid-panel"][data-session-id="${session.id}"]`);
+		await pane.getByRole("button", { name: "Maximize panel", exact: true }).click();
+		await expect.poll(() => streams[session.terminalHandleId] ?? 0, { timeout: 30_000 }).toBeGreaterThan(0);
+		await pane.getByRole("button", { name: "Restore grid", exact: true }).click();
+	}
+	await grid.locator('[data-testid="live-grid-layout"]').evaluate((node) => { node.parentElement.scrollTop = 0; });
 	const metrics = await app.evaluate(({ app }) => app.getAppMetrics().map(({ pid, type, cpu, memory }) => ({ pid, type, cpu, memory })));
 	await page.screenshot({ path: path.join(evidence, "remote-grid.png") });
 	await page.getByRole("button", { name: "Open Kanban", exact: true }).last().click();

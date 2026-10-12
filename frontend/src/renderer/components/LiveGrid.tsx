@@ -221,7 +221,7 @@ export function LiveGrid({ projectId, hostId }: { projectId: string; hostId?: st
 				</p>
 			) : null}
 			<div ref={viewport} className="relative min-h-0 flex-1">
-				<div className="absolute inset-0 overflow-auto overscroll-contain">
+				<div className="absolute inset-0 overflow-auto overscroll-contain [overflow-anchor:none]">
 					<div
 						className="relative"
 						data-testid="live-grid-layout"
