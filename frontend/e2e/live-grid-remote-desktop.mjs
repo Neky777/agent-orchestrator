@@ -14,6 +14,7 @@ assert.ok(bundle && root && hostLabel && projectId, "Provide the app, isolated p
 assert.ok(fs.existsSync(path.join(root, "cloud-auth.bin")), "Prepare an isolated authenticated profile with exclusive ownership of its credential refresh");
 const evidence = path.join(root, "remote-evidence");
 fs.mkdirSync(evidence, { recursive: true, mode: 0o700 });
+console.log("Launching ordinary AO with an isolated remote verification profile");
 const app = await _electron.launch({
 	executablePath: path.join(bundle, "Contents/MacOS/agent-orchestrator"), args: [],
 	env: { ...process.env, AO_DESKTOP_TEST_ROOT: root, AO_DESKTOP_TEST_PORT: "32192", AO_KEEP_DAEMON: "0", AO_TELEMETRY_REMOTE: "off", AO_SENTRY_DSN: "" }, timeout: 60_000,
@@ -30,15 +31,18 @@ try {
 		});
 	});
 	await expect.poll(() => page.evaluate(() => window.ao.daemon.getStatus()).then((state) => state.state), { timeout: 60_000 }).toBe("ready");
+	console.log("Isolated local daemon ready");
 	assert.equal(await app.evaluate(({ app }) => app.getPath("userData")), path.join(root, "electron"));
 	const selected = await page.evaluate(async (label) => (await window.ao.remotes.list()).find((host) => host.label === label), hostLabel);
 	assert.ok(selected, "The existing paired host must be available to the ordinary preload");
+	console.log(`Existing paired host available: ${hostLabel}`);
 	const connection = await page.evaluate(({ url, hostId }) => window.ao.remotes.connect(url, hostId), selected);
 	const read = async (endpoint) => {
-		const response = await fetch(`${connection.base}${endpoint}`); assert.ok(response.ok, `Read-only remote ${endpoint}: ${response.status}`); return response.json();
+		const response = await fetch(`${connection.base}${endpoint}`, { signal: AbortSignal.timeout(20_000) }); assert.ok(response.ok, `Read-only remote ${endpoint}: ${response.status}`); return response.json();
 	};
 	const snapshot = async () => ({ health: await read("/healthz"), sessions: (await read("/api/v1/sessions")).sessions });
 	before = await snapshot();
+	console.log(`Remote daemon ${before.health.pid}; ${before.sessions.length} existing session records`);
 	// Enforce read-only HTTP at the renderer/proxy boundary. OPTIONS is CORS.
 	await page.route(/\/api\/v1\//, async (route) => {
 		const request = route.request();
@@ -59,6 +63,7 @@ try {
 	await expect.poll(() => Object.keys(streams).length, { timeout: 60_000 }).toBeGreaterThan(1);
 	await expect.poll(() => page.getByRole("log", { name: "Conversation" }).count(), { timeout: 60_000 }).toBeGreaterThan(0);
 	const ids = await panels.evaluateAll((nodes) => nodes.map((node) => node.dataset.sessionId));
+	console.log(`Real Grid visible: ${ids.length} panels, ${Object.keys(streams).length} live TUI streams`);
 	const metrics = await app.evaluate(({ app }) => app.getAppMetrics().map(({ pid, type, cpu, memory }) => ({ pid, type, cpu, memory })));
 	await page.screenshot({ path: path.join(evidence, "remote-grid.png") });
 	await page.getByRole("button", { name: "Open Kanban", exact: true }).last().click();
