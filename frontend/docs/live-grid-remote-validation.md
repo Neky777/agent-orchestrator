@@ -19,7 +19,7 @@ Validated on macOS ARM64 (Apple M1 Pro, 16 GB RAM). The ordinary desktop bundle 
 | Complete browser renderer smoke | 92/93 passed; Chromium 148 pointer-selection case also fails with uncached Chat |
 | Same composer cases in shipped Electron | 2 passed |
 | Real packaged daemon/preload/SQLite/PTY/ACP | Mixed, TUI and Chat fixtures; 1/2/4/6/9/12 panels, input, resize, reconnect, layout and unchanged fixture provider PIDs |
-| Installed ordinary app with existing paired remote | 15 panels, all eligible workers, every displayed TUI visited, live worker output, Grid/Kanban, unchanged remote daemon and terminal generations across the update checks |
+| Installed ordinary app with existing paired remote | Sign-in and connection survived a full client restart; 15 panels, all eligible workers, every displayed TUI visited, live worker output, Grid/Kanban, unchanged remote daemon and terminal generations across the update checks |
 | Existing local database snapshot | Migrations and integrity passed; all projects/session records retained |
 | Go build/vet and targeted race suites | Passed: HTTP/API/controllers, project service, process environment |
 | Product UI / Cloud client | Typechecks, generation and 157 / 29 tests passed |
@@ -102,3 +102,4 @@ Quit AO completely before rollback. Preserve the current app/data, restore the p
 - `frontend/src/renderer/routes/_shell.tsx`
 - `frontend/src/renderer/test/shell-new-session-shortcut.test.tsx`
 - `frontend/vite.main.config.ts`
+- `frontend/docs/live-grid-remote-validation.md`
